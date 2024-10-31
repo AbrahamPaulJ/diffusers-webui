@@ -12,5 +12,6 @@ myenv\Scripts\activate     # On Windows
 
 pip install -r requirements.txt
 
+# Images
 
 ![Screenshot](images/readmeimg.png)
