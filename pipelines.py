@@ -80,17 +80,15 @@ class PipelineManager:
                     cache_dir=self.model_dir)
             else:
                 pipe.scheduler = scheduler_class.from_config(pipe.scheduler.config) 
-                
-            
-                
+                            
             # Enable memory-efficient attention
+            
             pipe.enable_xformers_memory_efficient_attention()
 
             print(f"Loaded checkpoint: {checkpoint_name} with scheduler {scheduler} (ControlNet Used: {use_controlnet})")
             current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
             print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
             
-
         except Exception as e:
             print(f"Error loading checkpoint {checkpoint_name}: {e}")
             traceback.print_exc() 
