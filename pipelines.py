@@ -47,7 +47,7 @@ class PipelineManager:
                 ('inpainting', False): StableDiffusionInpaintPipeline,
                 ('txt2img', False): StableDiffusionPipeline,
             }
-            print(pipeline_type,use_controlnet)
+
             pipeline_class = pipeline_classes.get((pipeline_type, use_controlnet))
             if not pipeline_class:
                 raise ValueError("Invalid pipeline type specified.")
