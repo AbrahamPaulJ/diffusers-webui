@@ -3,7 +3,7 @@ import gradio as gr
 import shutil  # For removing non-empty directories
 
 # Define the custom model directory
-model_dir = r"C:\Users\abrah\Desktop\Projects\Application\models"
+model_dir = "models"
 
 # Function to list model folders and specific file types in the directory
 def list_model_folders():
