@@ -5,6 +5,7 @@
 
 # Ignore models folder in the project root
 models/
+outputs/
 stable-diffusion-webui/
 test.py
 test2.py
