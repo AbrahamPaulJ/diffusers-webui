@@ -1,9 +1,12 @@
+# modules/manage_modules.py
+
 import os
 import gradio as gr
 import shutil  # For removing non-empty directories
 
 # Define the custom model directory
-model_dir = "models"
+rel_model_dir = "models"
+model_dir = os.path.abspath(rel_model_dir)
 
 # Function to list model folders and specific file types in the directory
 def list_model_folders():
