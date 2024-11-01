@@ -12,7 +12,7 @@ test2.py
 controlimg.jpg
 maskimg.jpg
 outputimg1.png
-upscaled_img.jpg
+upscaled_image.jpg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
