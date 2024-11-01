@@ -4,6 +4,8 @@ import torch
 from pipelines import PipelineManager
 from PIL import Image, ImageOps, PngImagePlugin
 import numpy as np
+from datetime import datetime
+import os
 from modules.manage_models import model_dir
 
 def reset_brush(image):
@@ -13,9 +15,9 @@ def reset_brush(image):
     # Check if height exceeds 550px
     if height > 450:
         # Calculate the scaling factor to maintain aspect ratio
-        scale_factor = 550 / height
+        scale_factor = 450 / height
         new_width = int(width * scale_factor)
-        new_height = 550
+        new_height = 450
         # Resize the image with the new dimensions
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
@@ -44,7 +46,7 @@ def use_brush(image):
     final_mask = white_background.convert('RGB')
     return final_mask
 
-def generate_inpaint_image(pipeline_manager: PipelineManager,scheduler, use_controlnet, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size):
+def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size):
     """Generate an inpainting image using the loaded pipeline."""
     pipe = pipeline_manager.active_pipe  # Use the active pipeline
 
@@ -126,11 +128,37 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,scheduler, use_cont
     # Save the first image with its generation metadata
     
     first_output_image = processed_images[0]
-    metadata = PngImagePlugin.PngInfo()
-    for key, value in pipe_kwargs.items():
-        metadata.add_text(key, str(value))
-    first_output_image.save("outputimg1.png", pnginfo=metadata)
     
+    # Create metadata with function parameters
+    metadata = PngImagePlugin.PngInfo()
+    #metadata.add_text("use_controlnet", str(use_controlnet))
+    #metadata.add_text("generator", str(generator))
+    metadata.add_text("model/checkpoint", str(checkpoint))
+    metadata.add_text("scheduler", str(scheduler))
+    metadata.add_text("seed", str(seed))
+    metadata.add_text("prompt", prompt)
+    metadata.add_text("negative_prompt", negative_prompt)
+    metadata.add_text("width", str(width))
+    metadata.add_text("height", str(height))
+    metadata.add_text("steps", str(steps))
+    metadata.add_text("cfg_scale", str(cfg_scale))
+    metadata.add_text("clip_skip", str(clip_skip))
+    #metadata.add_text("mask_output", str(mask_output))
+    metadata.add_text("fill_setting", str(fill_setting))
+    #metadata.add_text("segment_type", segment_type)
+    metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
+    metadata.add_text("post_process", str(post_process))
+    metadata.add_text("custom_dimensions", str(custom_dimensions))
+    metadata.add_text("denoise_strength", str(denoise_strength))
+    metadata.add_text("batch_size", str(batch_size))
+
+    # Save the output image with metadata
+    first_output_image.save(
+    os.path.join("outputs/inpaint", f"output_image_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"), 
+    pnginfo=metadata)
+    
+    first_output_image.save("outputimg1.png", pnginfo=metadata)
+        
     return processed_images  # Return as a list of images for Gradio's Gallery    
     
 

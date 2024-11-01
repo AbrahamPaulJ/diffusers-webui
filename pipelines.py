@@ -1,3 +1,5 @@
+#pipelines.py
+
 import diffusers.schedulers
 from diffusers import (StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline, 
                        StableDiffusionPipeline, ControlNetModel)
@@ -53,7 +55,7 @@ class PipelineManager:
                 raise ValueError("Invalid pipeline type specified.")
             
             load_method = pipeline_class.from_single_file if checkpoint_name.endswith(".ckpt") else pipeline_class.from_pretrained
-
+            print(os.path.join(os.path.abspath(self.model_dir), checkpoint_name))
             print(f"Loading checkpoint from: {checkpoint_name}")
             print(f"Using load method: {load_method}")
             pipe = load_method(
@@ -61,13 +63,12 @@ class PipelineManager:
                 controlnet=controlnet if use_controlnet else None,
                 torch_dtype=torch.float16,
                 safety_checker=None,
-                local_files_only =True,
                 requires_safety_checker=False,
                 cache_dir=self.model_dir
             )
 
             # Move the pipeline to the GPU and activate it
-            self.active_pipe = pipe.to("cuda")
+            self.active_pipe = pipe.to("cuda") 
             self.active_checkpoint = checkpoint_name
             
             self.active_scheduler = scheduler
@@ -81,8 +82,7 @@ class PipelineManager:
             else:
                 pipe.scheduler = scheduler_class.from_config(pipe.scheduler.config) 
                             
-            # Enable memory-efficient attention
-            
+            # Enable memory-efficient attention 
             pipe.enable_xformers_memory_efficient_attention()
 
             print(f"Loaded checkpoint: {checkpoint_name} with scheduler {scheduler} (ControlNet Used: {use_controlnet})")
