@@ -2,7 +2,7 @@
 
 import torch
 from pipelines import PipelineManager
-from PIL import Image, ImageOps, PngImagePlugin
+from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
 import numpy as np
 from datetime import datetime
 import os
@@ -46,7 +46,7 @@ def use_brush(image):
     final_mask = white_background.convert('RGB')
     return final_mask
 
-def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size):
+def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur):
     """Generate an inpainting image using the loaded pipeline."""
     pipe = pipeline_manager.active_pipe  # Use the active pipeline
 
@@ -69,6 +69,9 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, schedul
     if maintain_aspect_ratio:
         mask_output = add_padding(mask_output, width, height, pad_color=0)  # Black padding for the mask
         input_image = add_padding(input_image, width, height)  # Use average color for input image
+    
+    if mask_blur > 0:    
+        mask_output = mask_output.filter(ImageFilter.GaussianBlur(mask_blur))
         
     mask_array = np.array(mask_output) / 255.0
 
