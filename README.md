@@ -17,9 +17,9 @@ Here's a way to group the first two lines together under the "Inpainting" tab wh
 ```markdown
 # Features
 
- Inpainting tab: This tab allows image inpainting with the parameters detailed in [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint).
+ Inpainting tab: This tab allows image inpainting with the parameters detailed in 
+ [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint).
 
- 
  Additional features: A manual brush tool for creating the image mask,  a Gaussian blur slider for masked region,
  post-processing button to preserve non-masked areas.
 
