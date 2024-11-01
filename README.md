@@ -17,11 +17,11 @@ Here's a way to group the first two lines together under the "Inpainting" tab wh
 ```markdown
 # Features
 
-- **Inpainting tab**: This tab allows image inpainting with the parameters detailed in [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint), as well as a manual brush tool for creating the image mask and post-processing to preserve non-masked areas.
+- Inpainting tab: This tab allows image inpainting with the parameters detailed in [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint), as well as a manual brush tool for creating the image mask and post-processing to preserve non-masked areas.
 
-- **Upscaling tab**: Includes ESRGAN upscaling options.
+- Image Upscale tab: Includes ESRGAN upscaling options.
 
-- **PNG Info tab**: For previously generated images, featuring a view of the generation parameters and a "Send Parameters to Inpaint Tab" option.
+- PNG Info tab: For previously generated images, featuring a view of the generation parameters and a "Send Parameters to Inpaint Tab" option.
 ```
 
 # Images
