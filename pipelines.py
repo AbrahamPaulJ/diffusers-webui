@@ -67,8 +67,6 @@ class PipelineManager:
                 cache_dir=self.model_dir
             )
 
-            # Move the pipeline to the GPU and activate it
-            self.active_pipe = pipe.to("cuda") 
             self.active_checkpoint = checkpoint_name
             
             self.active_scheduler = scheduler
@@ -82,7 +80,11 @@ class PipelineManager:
             else:
                 pipe.scheduler = scheduler_class.from_config(pipe.scheduler.config) 
                             
+                            
+            # Move the pipeline to the GPU and activate it
+            self.active_pipe = pipe.to("cuda")
             # Enable memory-efficient attention 
+            pipe.enable_model_cpu_offload()
             pipe.enable_xformers_memory_efficient_attention()
 
             print(f"Loaded checkpoint: {checkpoint_name} with scheduler {scheduler} (ControlNet Used: {use_controlnet})")

@@ -7,7 +7,8 @@ from modules.upscale import upscale
 from modules.manage_models import manage_models_tab, model_dir
 from pipelines import PipelineManager
 from torch import Generator
-import random
+import random   
+import time
 
 class StableDiffusionApp:
     def __init__(self, model_dir):
@@ -53,9 +54,11 @@ class StableDiffusionApp:
 
                     with gr.Row(equal_height=True):
                         with gr.Column(scale=1):
-                            custom_dimensions = gr.Checkbox(label="Custom Dimensions", value=False)
-                            width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512, visible=False)
-                            height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=768, visible=False)
+                            custom_dimensions = gr.Checkbox(label="Custom Output Dimensions", value=False)
+                            with gr.Row(equal_height=True):
+                                width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512, visible=False, allow_custom_value=True)
+                                height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=768, visible=False, allow_custom_value=True)
+                            mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=10, value=0, step=0.1)
 
                         with gr.Column(scale=1):
                             segment_type = gr.Radio(label="Inpaint Helper", choices=["Use Brush"], value="Use Brush", visible=False)
@@ -156,14 +159,16 @@ class StableDiffusionApp:
 
                     generate_button.click(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, inpaint_input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size],
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, inpaint_input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur],
                         outputs=[output_seed, output_image]
                     )
-
-                    inpainting_checkpoint_dropdown.change(fn=self.load_inpaint, inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet], outputs=None)
-                    scheduler_dropdown.change(fn=self.load_inpaint, inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet], outputs=None)
-                    use_controlnet.change(fn=self.load_inpaint, inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet], outputs=None)
-
+                    gr.on(
+                        triggers=[inpainting_checkpoint_dropdown.change, scheduler_dropdown.change, use_controlnet.change],
+                        fn=self.load_inpaint,
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet],
+                        outputs=None
+                    )
+                    
                     clear_button.click(fn=lambda: None, inputs=[], outputs=output_image)
                     upscalefour.click(fn=upscale, inputs=output_image, outputs=output_image)
 
@@ -308,7 +313,17 @@ class StableDiffusionApp:
                 manage_models_tab()
 
         iface.launch()
-            
+        
+    def time_execution(fn):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            result = fn(*args, **kwargs)
+            end_time = time.time()
+            print(f"{fn.__name__} took {end_time - start_time:.2f} seconds")
+            return result
+        return wrapper
+
+    @time_execution        
     def seed_and_gen_inpaint_image(self, checkpoint, scheduler, use_controlnet, seed, *args):
         """Generate an inpainted image after loading the appropriate model."""
         # Reload pipeline if necessary
@@ -340,7 +355,9 @@ class StableDiffusionApp:
     #     self.pipeline_manager.load_pipeline(selected_checkpoint, 'txt2img')
     #     # Generate the txt2img image with the loaded pipeline
     #     return generate_txt2img_image(self.pipeline_manager, *args)
+
         
 # Main execution
 if __name__ == "__main__":
     app = StableDiffusionApp(model_dir)
+
