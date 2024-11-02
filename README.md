@@ -12,6 +12,7 @@ myenv\Scripts\activate     # On Windows
 Clone the repository:
 ```markdown
 git clone https://github.com/AbrahamPaulJ/diffusers-webui.git
+
 cd diffusers-webui
 ```
 
@@ -23,7 +24,7 @@ pip install -r requirements.txt
 
 # Run
 
-```bash
+```markdown
 python app.py
 ```
 
