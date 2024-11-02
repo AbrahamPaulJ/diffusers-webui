@@ -1,5 +1,5 @@
 # Installation
-
+```markdown
 Create and activate a virtual environment:
 
 python -m venv myenv
@@ -7,10 +7,14 @@ python -m venv myenv
 source myenv/bin/activate  # On Linux/macOS
 
 myenv\Scripts\activate     # On Windows
+```
 
 # Install dependencies
 
 pip install -r requirements.txt
+
+Here's a way to group the first two lines together under the "Inpainting" tab while keeping the other tabs separate. This makes it clear that both inpainting and mask creation are related to the inpainting tab.
+
 
 # Features
 
@@ -24,7 +28,7 @@ pip install -r requirements.txt
 
 - PNG Info tab: For previously generated images, featuring a view of the generation
  parameters and a "Send Parameters to Inpaint Tab" option.
-```
+
 
 # Images
 
