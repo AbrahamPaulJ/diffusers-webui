@@ -144,6 +144,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, schedul
     metadata.add_text("width", str(width))
     metadata.add_text("height", str(height))
     metadata.add_text("steps", str(steps))
+    metadata.add_text("mask_blur", str(mask_blur))
     metadata.add_text("cfg_scale", str(cfg_scale))
     metadata.add_text("clip_skip", str(clip_skip))
     #metadata.add_text("mask_output", str(mask_output))

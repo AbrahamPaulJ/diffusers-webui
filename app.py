@@ -267,20 +267,21 @@ class StableDiffusionApp:
                         return (
                             parameters.get("model/checkpoint","stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
                             parameters.get("scheduler","DPMSolverMultistepScheduler"),
-                            parameters.get("seed", -1),                     # seed
-                            parameters.get("prompt", ""),                    # prompt
-                            parameters.get("negative_prompt", ""),           # negative prompt
-                            int(parameters.get("width", 512)),              # width
-                            int(parameters.get("height", 768)),             # height
-                            int(parameters.get("steps", 25)),                # steps
-                            float(parameters.get("cfg_scale", 7.0)),        # cfg_scale
-                            int(parameters.get("clip_skip", 0)),             # clip_skip
-                            parameters.get("fill_setting", "Generate Inside Mask"),  # fill_setting
-                            parameters.get("maintain_aspect_ratio", "True") == "True",  # maintain_aspect_ratio
-                            parameters.get("post_process", "True") == "True",  # post_process
-                            parameters.get("custom_dimensions", "True") == "True",  # custom_dimensions
-                            float(parameters.get("denoise_strength", 1.0)),  # denoise_strength
-                            int(parameters.get("batch_size", 1))             # batch_size
+                            parameters.get("seed", -1),            
+                            parameters.get("prompt", ""),             
+                            parameters.get("negative_prompt", ""),        
+                            int(parameters.get("width", 512)),              
+                            int(parameters.get("height", 768)),            
+                            int(parameters.get("steps", 25)),   
+                            float(parameters.get("mask_blur", 0)),       
+                            float(parameters.get("cfg_scale", 7.0)),     
+                            int(parameters.get("clip_skip", 0)),             
+                            parameters.get("fill_setting", "Generate Inside Mask"),  
+                            parameters.get("maintain_aspect_ratio", "True") == "True", 
+                            parameters.get("post_process", "True") == "True",  
+                            parameters.get("custom_dimensions", "True") == "True",  
+                            float(parameters.get("denoise_strength", 1.0)),  
+                            int(parameters.get("batch_size", 1))         
                         )
                         
                         

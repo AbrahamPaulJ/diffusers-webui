@@ -12,9 +12,6 @@ myenv\Scripts\activate     # On Windows
 
 pip install -r requirements.txt
 
-Here's a way to group the first two lines together under the "Inpainting" tab while keeping the other tabs separate. This makes it clear that both inpainting and mask creation are related to the inpainting tab.
-
-```markdown
 # Features
 
  Inpainting tab: This tab allows image inpainting with the parameters detailed in 
