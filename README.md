@@ -9,11 +9,22 @@ source myenv/bin/activate  # On Linux/macOS
 myenv\Scripts\activate     # On Windows
 ```
 
+Clone the repository:
+```markdown
+git clone https://github.com/AbrahamPaulJ/diffusers-webui.git
+cd diffusers-webui
+```
+
 # Install dependencies
 
-Install requirements:
 ```markdown
 pip install -r requirements.txt
+```
+
+# Run
+
+```bash
+python app.py
 ```
 
 # Features
