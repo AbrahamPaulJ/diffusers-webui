@@ -7,6 +7,7 @@
 models/
 outputs/
 stable-diffusion-webui/
+.gradio/
 tests/
 test.py
 test2.py
@@ -16,7 +17,6 @@ outpaintmaskimg.png
 outpaintinputimg.png
 outputimg1.png
 upscaled_image.jpg
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
