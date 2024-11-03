@@ -35,23 +35,18 @@ python app.py
 
     - Implemented features:
 
-        - Manual Brush Tool
-        - Allows users to create the image mask (inpaint mode).
+        - Manual Brush Tool: Allows users to create the image mask (inpaint mode).
         
-        - Transform Tool
-        - Enables cropping of the outpaint canvas (outpaint mode).
+        - Transform Tool: Enables cropping of the outpaint canvas (outpaint mode).
         
-        - Gaussian Blur Slider
-        - For applying blur to the mask edges.
+        - Gaussian Blur Slider: For applying blur to the mask edges.
         
-        - Post-Processing Option
-        - Preserves non-masked areas during processing.
+        - Post-Processing Option: Preserves non-masked areas during processing.
 
-        - Image Upscale tab: Includes ESRGAN upscaling options.
+- Image Upscale tab: Includes ESRGAN upscaling options.
 
 - PNG Info tab: For previously generated images, featuring a view of the generation
  parameters and a "Send Parameters to Inpaint Tab" option.
-
 
 # Images
 
