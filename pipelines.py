@@ -7,6 +7,9 @@ import torch
 import os
 import traceback
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if device == "cuda" else torch.float32
+
 class PipelineManager:
     def __init__(self, model_dir: str):
         self.model_dir = model_dir
@@ -20,6 +23,7 @@ class PipelineManager:
                       pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
                       controlnet_type: str = "None"):
         """Load or update the pipeline as needed, handling model, scheduler and ControlNet adjustments."""
+        
     
         # Handle None case for self.control_net_type to avoid AttributeError
         current_control_net_type = self.control_net_type if self.control_net_type is not None else "None"
@@ -31,7 +35,7 @@ class PipelineManager:
         if (checkpoint_name != self.active_checkpoint) or controlnet_changed:
             if self.active_pipe is not None:
                 del self.active_pipe
-                torch.cuda.empty_cache()
+                torch.cuda.empty_cache() if device == "cuda" else None
                 print(f"Previous checkpoint {self.active_checkpoint} unloaded.")
 
             try:
@@ -55,14 +59,13 @@ class PipelineManager:
                 pipe = load_method(
                     os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith(".ckpt") else checkpoint_name,
                     controlnet=self.controlnet_model if is_controlnet else None,
-                    torch_dtype=torch.float16,
+                    torch_dtype=torch_dtype,
                     safety_checker=None,
                     requires_safety_checker=False,
                     cache_dir=self.model_dir
                 )
                 
                 # Move the pipeline to GPU if available.
-                device = "cuda" if torch.cuda.is_available() else "cpu"
                 self.active_pipe = pipe.to(device)
                 print(f"Using device: {device}")
                 self.active_checkpoint = checkpoint_name
@@ -83,8 +86,9 @@ class PipelineManager:
         self.active_pipe.enable_model_cpu_offload()
         self.active_pipe.enable_xformers_memory_efficient_attention()
 
-        current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
-        print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
+        if device == "cuda":
+            current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
+            print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
 
     def update_controlnet(self, controlnet_type: str):
         """Enable or disable ControlNet dynamically based on the dropdown selection."""
@@ -103,7 +107,7 @@ class PipelineManager:
                     print(f"Loading ControlNet model: {controlnet_type}")
                     self.controlnet_model = ControlNetModel.from_pretrained(
                         model_name,
-                        torch_dtype=torch.float16,
+                        torch_dtype=torch_dtype,
                         cache_dir=self.model_dir
                     )
                     self.control_net_type = model_name
