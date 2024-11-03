@@ -6,9 +6,11 @@ from diffusers import (
 import torch
 import os
 import traceback
+import importlib.util
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if device == "cuda" else torch.float32
+has_xformers = importlib.util.find_spec("xformers") is not None
 
 class PipelineManager:
     def __init__(self, model_dir: str):
@@ -83,10 +85,11 @@ class PipelineManager:
         # Update Scheduler dynamically
         self.update_scheduler(scheduler, controlnet_type)
         
-        self.active_pipe.enable_model_cpu_offload()
-        self.active_pipe.enable_xformers_memory_efficient_attention()
-
         if device == "cuda":
+            self.active_pipe.enable_model_cpu_offload()
+            if has_xformers:
+                self.active_pipe.enable_xformers_memory_efficient_attention()
+
             current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
             print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
 
