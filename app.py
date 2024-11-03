@@ -243,28 +243,7 @@ class StableDiffusionApp:
                 #         outputs=txt2img_output_image
                 #     )
 
-                # Image Upscale Tab
-                with gr.TabItem("Image Upscale"):
-                    with gr.Row():
-                        upscale_input_image = gr.Image(type="pil", label="Input Image", scale=2)
-                        upscale_output_image = gr.Image(type="pil", label="Output Image", scale=4)  # Make this container larger
-                    with gr.Row(equal_height=True):
-                        upscale_factor = gr.Radio(label="Upscale Factor", choices=["2", "4"], value="4", type="value")
-                        with gr.Column():
-                            upscale_button = gr.Button("Upscale")
-                            upscale_to_inpaint = gr.Button("Send to Inpaint Tab")
-                    
-                    def send(img):
-                        return img
-            
-                    #Listeners   
-                    upscale_button.click(
-                        fn=upscale,
-                        inputs=[upscale_input_image, upscale_factor],
-                        outputs=upscale_output_image
-                    )             
-                    upscale_button.click(fn=upscale, inputs=[upscale_input_image, upscale_factor], outputs=upscale_output_image)
-                    upscale_to_inpaint.click(fn=send,inputs=upscale_output_image, outputs=inpaint_input_image)
+
                                 
                 with gr.TabItem("PNG Info"):
                     with gr.Row(equal_height=True):
@@ -348,8 +327,31 @@ class StableDiffusionApp:
                         custom_dimensions, 
                         denoise_strength, 
                         batch_size 
-                    ]
-)             
+                    ])
+                    
+                # Image Upscale Tab
+                with gr.TabItem("Image Upscale"):
+                    with gr.Row():
+                        upscale_input_image = gr.Image(type="pil", label="Input Image", scale=2)
+                        upscale_output_image = gr.Image(type="pil", label="Output Image", scale=4)  # Make this container larger
+                    with gr.Row(equal_height=True):
+                        upscale_factor = gr.Radio(label="Upscale Factor", choices=["2", "4"], value="4", type="value")
+                        with gr.Column():
+                            upscale_button = gr.Button("Upscale")
+                            upscale_to_inpaint = gr.Button("Send to Inpaint Tab")
+                    
+                    def send(img):
+                        return img
+            
+                    #Listeners   
+                    upscale_button.click(
+                        fn=upscale,
+                        inputs=[upscale_input_image, upscale_factor],
+                        outputs=upscale_output_image
+                    )             
+                    upscale_button.click(fn=upscale, inputs=[upscale_input_image, upscale_factor], outputs=upscale_output_image)
+                    upscale_to_inpaint.click(fn=send,inputs=upscale_output_image, outputs=inpaint_input_image)
+             
                 manage_models_tab()
 
         iface.queue().launch()
