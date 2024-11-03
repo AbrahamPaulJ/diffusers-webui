@@ -12,9 +12,9 @@ def upscale(image, scale_factor=4):
 
     # Load the appropriate model based on the scale factor
     model = RealESRGAN(device, scale=scale_factor)
-    model.load_weights(r'Application\models\RealESRGAN_x4.pth', download=True)  # Adjust path if needed
+    model.load_weights(r'models\RealESRGAN_x4.pth', download=True)  # Adjust path if needed
     
-        # Check if `image` is a list
+    # Check if `image` is a list
     if isinstance(image, list):
         image = image[0]  # Take the first image if it's a list
         if isinstance(image, tuple):
@@ -26,8 +26,8 @@ def upscale(image, scale_factor=4):
     # Print the input image size for debugging
     print("Input image size:", image.size)
 
-    # Upscale the image using the model
-    output_image = model.predict(image)
+    # Upscale the image using the model, passing the scale factor
+    output_image = model.predict(image, scale=scale_factor)  # Use scale_factor here
 
     # Convert output image to a NumPy array
     output_image_np = np.array(output_image)
@@ -40,3 +40,4 @@ def upscale(image, scale_factor=4):
     output_image.save("upscaled_image.jpg", "JPEG")
 
     return output_image
+

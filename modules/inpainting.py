@@ -2,26 +2,57 @@
 
 import torch
 from pipelines import PipelineManager
-from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
+from PIL import Image, ImageOps, PngImagePlugin, ImageFilter, ImageDraw
 import numpy as np
 from datetime import datetime
 import os
 from modules.manage_models import model_dir
+import time
 
-def reset_brush(image):
+def reset_brush(mode, image):
     if image is None:
-        return Image.new("RGBA", (520, 520), (0, 0, 0, 0))  # Return a blank image if no input
-    width, height = image.size
-    # Check if height exceeds 550px
-    if height > 450:
-        # Calculate the scaling factor to maintain aspect ratio
-        scale_factor = 450 / height
-        new_width = int(width * scale_factor)
-        new_height = 450
-        # Resize the image with the new dimensions
+        # Return a blank image if there's no input image
+        return Image.new("RGBA", (520, 520), (0, 0, 0, 0))
+
+    if mode == "Inpaint":
+        # For Inpaint mode, check if height exceeds 450px
+        width, height = image.size
+        if height > 450:
+            # Calculate the scaling factor to maintain aspect ratio
+            scale_factor = 450 / height
+            new_width = int(width * scale_factor)
+            new_height = 450
+            # Resize the image with the new dimensions
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        return image  # Return resized image for Inpaint mode
+
+    elif mode == "Outpaint":
+        # For Outpaint mode, resize the image so that the larger side is 200
+        width, height = image.size
+        if width > height:
+            scale_factor = 200 / width
+            new_width = 200
+            new_height = int(height * scale_factor)
+        else:
+            scale_factor = 200 / height
+            new_height = 200
+            new_width = int(width * scale_factor)
+
+        # Resize the image
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    return image
+        # Create a black image of 500x500
+        final_image = Image.new("RGBA", (500, 500), (0, 0, 0, 255))
+
+        # Paste the resized image onto the black background, centered
+        x_offset = (500 - new_width) // 2
+        y_offset = (500 - new_height) // 2
+        final_image.paste(image, (x_offset, y_offset))
+
+        return final_image  # Return the combined image for Outpaint mode
+
+
+
 
 def use_brush(image):
     if image is None:
@@ -46,41 +77,87 @@ def use_brush(image):
     final_mask = white_background.convert('RGB')
     return final_mask
 
-def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, mask_output, fill_setting, input_image, segment_type, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur):
-    """Generate an inpainting image using the loaded pipeline."""
-    pipe = pipeline_manager.active_pipe  # Use the active pipeline
+def use_crop(image):
+    return image["background"]
 
+def time_execution(fn):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = fn(*args, **kwargs)
+        end_time = time.time()
+        print(f"{fn.__name__} took {end_time - start_time:.2f} seconds")
+        return result
+    return wrapper
+
+@time_execution 
+def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
+    """Generate an inpainting image using the loaded pipeline."""
+    
+    pipe = pipeline_manager.active_pipe
+    
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
-  
-    if not custom_dimensions:
-        width, height = auto_select_dimensions(input_image)
-        print(f"Target dimensions are {height}x{width}")
-
-    if segment_type == "Use Brush":
-        mask_output = use_brush(mask_output)
-        mask_output = mask_output.resize((input_image.width, input_image.height), Image.Resampling.LANCZOS) 
-    else:
-        mask_output = mask_output["background"]
-
-    # Convert the mask image to grayscale
-    mask_output = mask_output.convert("L")
-
-    if maintain_aspect_ratio:
-        mask_output = add_padding(mask_output, width, height, pad_color=0)  # Black padding for the mask
-        input_image = add_padding(input_image, width, height)  # Use average color for input image
-    
-    if mask_blur > 0:    
-        mask_output = mask_output.filter(ImageFilter.GaussianBlur(mask_blur))
+     
+    if mode=="Inpaint":
+        if not custom_dimensions:
+            width, height = auto_select_dimensions(input_image)
+            print(f"Target dimensions are {height}x{width}")
+               
+        inpaint_mask = use_brush(inpaint_mask)
+        inpaint_mask = inpaint_mask.resize((input_image.width, input_image.height), Image.Resampling.LANCZOS) 
         
-    mask_array = np.array(mask_output) / 255.0
+        # Convert the mask image to grayscale
+        inpaint_mask = inpaint_mask.convert("L")
 
-    mask_image = mask_array if fill_setting == "Generate Inside Mask" else 1.0 - mask_array
-    mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8))
-    mask_pil.save("maskimg.jpg")
+        if maintain_aspect_ratio:
+            inpaint_mask = add_padding(inpaint_mask, width, height, pad_color=0)  # Black padding for the mask
+            input_image = add_padding(input_image, width, height)  # Use average color for input image
+        
+        if mask_blur > 0:    
+            inpaint_mask = inpaint_mask.filter(ImageFilter.GaussianBlur(mask_blur))
+            
+        mask_array = np.array(inpaint_mask) / 255.0
 
-    eta = 1.0
+        mask_image = mask_array if fill_setting == "Generate Inside Mask" else 1.0 - mask_array
+        mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8))
+        mask_pil.save("inpaintmaskimg.png")
+        
+        print("Input image size (PIL):", input_image.size)  # Width, Height
+        print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
+        print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
+        
+    if mode=="Outpaint":  
+        outpaint_mask = use_crop(inpaint_mask)
+        outpaint_mask = resize_to_max_side(outpaint_mask, target_size=768)
+        outpaint_mask.save("resized_outpaint.png")     
+        inner_dimensions = get_inner_dimensions(outpaint_mask)
+        bounding_box_sides = get_bounding_box_sides(outpaint_mask)
+        left, right, top, bottom = bounding_box_sides
+        padded_width = inner_dimensions[0] + left + right
+        padded_height = inner_dimensions[1] + top + bottom
+        resized_input_image = input_image.resize(inner_dimensions, Image.Resampling.LANCZOS)
+        
+        # Create a new blank image with padding dimensions and a black background in RGB
+        padded_image = Image.new("RGB", (padded_width, padded_height), (0, 0, 0))  # Black background
+        padded_image.paste(resized_input_image.convert('RGB'), (left, top))  # Ensure resized_input_image is in RGB
+        # `padded_image` now has the resized image centered with black padding on all sides
+        padded_image = resize_to_nearest_multiple_of_8(padded_image)
+        padded_image.save("outpaintinputimg.png")
+        width, height = padded_image.size
+        mask_image = Image.new("RGBA", (resized_input_image.width, resized_input_image.height), (255, 255, 255, 255))
+        padded_mask_image = Image.new("RGBA", (padded_width, padded_height), (0, 0, 0, 255))  # Black background
+        padded_mask_image.paste(mask_image, (left, top))
+        padded_mask_image = padded_mask_image.resize((padded_image.width, padded_image.height), Image.Resampling.LANCZOS).convert("L")
 
+        if mask_blur > 0:    
+            padded_mask_image = padded_mask_image.filter(ImageFilter.GaussianBlur(mask_blur))
+        padded_mask_image.save("outpaintmaskimg.png")
+        mask_image = np.array(padded_mask_image) / 255     
+        input_image=padded_image
+        print("Input image size (PIL):", input_image.size)  # Width, Height
+        print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
+        print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
+    
     # Prepare the keyword arguments for the pipeline
     pipe_kwargs = {
         "num_images_per_prompt": batch_size,
@@ -93,12 +170,13 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, schedul
         "strength": denoise_strength,
         "guidance_scale": cfg_scale,
         "clip_skip": clip_skip,
-        "mask_image": 1.0 - mask_image,  # Use the determined mask
+        "mask_image": 1.0 - mask_image, 
         "image": input_image,
     }
 
     # Add control_image to the keyword arguments if ControlNet is used
     if use_controlnet:
+            eta = 1.0
             control_image = make_inpaint_condition(input_image, mask_pil) if use_controlnet else None
             control_img_view = Image.fromarray((control_image.squeeze(0).permute(1, 2, 0).numpy() * 255).astype(np.uint8))
             control_img_view.save("controlimg.jpg")
@@ -114,26 +192,27 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, schedul
     processed_images = []
 
     for generated_image in generated_images:
-        if post_process:
-            # Convert images to numpy arrays for pixel-level manipulation
-            generated_image_np = np.array(generated_image)
-            input_image_np = np.array(input_image)
+            if post_process:
+                # Convert images to numpy arrays for pixel-level manipulation
+                generated_image_np = np.array(generated_image)
+                input_image_np = np.array(input_image)
 
-            # Combine the original image with the inpainted image using the mask
-            postprocess_np = np.where(np.expand_dims(mask_image, axis=-1) > 0.5, input_image_np, generated_image_np)
+                # Combine the original image with the inpainted image using the mask
+                postprocess_np = np.where(np.expand_dims(mask_image, axis=-1) > 0.5, input_image_np, generated_image_np)
 
-            # Convert back to PIL image
-            postprocess_image = Image.fromarray(postprocess_np.astype(np.uint8))
-            processed_images.append(postprocess_image)
-        else:
-            processed_images.append(generated_image)
+                # Convert back to PIL image
+                postprocess_image = Image.fromarray(postprocess_np.astype(np.uint8))
+                processed_images.append(postprocess_image)
+            else:
+                processed_images.append(generated_image)
+
 
     # Save the first image with its generation metadata
     
     first_output_image = processed_images[0]
-    
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
+
     #metadata.add_text("use_controlnet", str(use_controlnet))
     #metadata.add_text("generator", str(generator))
     metadata.add_text("model/checkpoint", str(checkpoint))
@@ -147,19 +226,26 @@ def generate_inpaint_image(pipeline_manager: PipelineManager,checkpoint, schedul
     metadata.add_text("mask_blur", str(mask_blur))
     metadata.add_text("cfg_scale", str(cfg_scale))
     metadata.add_text("clip_skip", str(clip_skip))
-    #metadata.add_text("mask_output", str(mask_output))
-    metadata.add_text("fill_setting", str(fill_setting))
+    metadata.add_text("mode", str(mode))
+    #metadata.add_text("inpaint_mask", str(inpaint_mask))
+    if mode=="Inpaint":
+        metadata.add_text("fill_setting", str(fill_setting))
+        metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
+        metadata.add_text("custom_dimensions", str(custom_dimensions))
     #metadata.add_text("segment_type", segment_type)
-    metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
     metadata.add_text("post_process", str(post_process))
-    metadata.add_text("custom_dimensions", str(custom_dimensions))
     metadata.add_text("denoise_strength", str(denoise_strength))
     metadata.add_text("batch_size", str(batch_size))
+    
+    output_directory = "outputs/inpaint" if mode == "Inpaint" else "outputs/outpaint"
+    # Ensure the output directory exists
+    os.makedirs(output_directory, exist_ok=True)
 
-    # Save the output image with metadata
+    # Save the first image with its generation metadata
     first_output_image.save(
-    os.path.join("outputs/inpaint", f"output_image_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"), 
-    pnginfo=metadata)
+        os.path.join(output_directory, f"output_image_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"), 
+        pnginfo=metadata
+    )
     
     first_output_image.save("outputimg1.png", pnginfo=metadata)
         
@@ -250,5 +336,87 @@ def auto_select_dimensions(image, target_sizes=[512, 768, 1024]):
 
     return target_width, target_height
 
+def resize_to_max_side(image, target_size=1024):
+    """
+    Resizes the image so that the larger side becomes `target_size` (e.g., 1024),
+    maintaining the aspect ratio.
+
+    Args:
+        image (PIL.Image): The input image.
+        target_size (int): The target size for the larger dimension.
+
+    Returns:
+        PIL.Image: The resized image with the larger side set to `target_size`.
+    """
+    width, height = image.size
+    
+    # Determine scale factor to make the larger side equal to target_size
+    if width > height:
+        scale_factor = target_size / width
+    else:
+        scale_factor = target_size / height
+
+    # Calculate new dimensions and resize the image
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    return resized_image
+
+def get_inner_dimensions(image):
+    # Convert the image to grayscale and then to binary (black/white)
+    gray_image = image.convert("L")  # Convert to grayscale
+    binary_mask = gray_image.point(lambda p: p > 0 and 255)  # Create a binary mask
+
+    # Find the bounding box of the non-black areas
+    bbox = binary_mask.getbbox()  # Returns (left, upper, right, lower)
+
+    if bbox is None:
+        return None  # No non-black pixels found
+
+    # Calculate the width and height based on the bounding box
+    inner_width = bbox[2] - bbox[0]  # right - left
+    inner_height = bbox[3] - bbox[1]  # lower - upper
+    print(f"Inner dimensions are: {inner_width} x {inner_height}.")
+    return inner_width, inner_height
+
+def get_bounding_box_sides(outpaint_mask):
+    # Convert the image to grayscale and create a binary mask to isolate non-black areas
+    gray_image = outpaint_mask.convert("L")  # Convert to grayscale
+    binary_mask = gray_image.point(lambda p: p > 0 and 255)  # Convert to binary (black/white)
+
+    # Get the bounding box of the non-black region
+    bbox = binary_mask.getbbox()  # Returns (left, upper, right, lower)
+    
+    if bbox is not None:
+        # Calculate the lengths of each side of the bounding box
+        left_side = bbox[0]
+        right_side = outpaint_mask.width - bbox[2]
+        top_side = bbox[1]
+        bottom_side = outpaint_mask.height - bbox[3]
+
+        # Print the results
+        print(f"Left side: {left_side} pixels")
+        print(f"Right side: {right_side} pixels")
+        print(f"Top side: {top_side} pixels")
+        print(f"Bottom side: {bottom_side} pixels")
+        
+        # Return the side lengths as a tuple
+        return (left_side, right_side, top_side, bottom_side)
+    else:
+        print("No non-black region found.")
+        return (0, 0, 0, 0)  # Return zeros if no non-black region is found
+
+def resize_to_nearest_multiple_of_8(image):
+    # Get the current dimensions of the image
+    width, height = image.size
+    
+    # Calculate the nearest dimensions that are multiples of 8
+    new_width = (width + 7) // 8 * 8
+    new_height = (height + 7) // 8 * 8
+
+    # Resize the image to these dimensions
+    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    return resized_image
 
 

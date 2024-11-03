@@ -21,7 +21,7 @@ class PipelineManager:
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
                       pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
                       use_controlnet: bool = False):
-        """Load or update the pipeline as needed, handling model, scheduler, and ControlNet adjustments."""
+        """Load or update the pipeline as needed, handling model, scheduler and controlnet adjustments."""
 
         # Reload only if a new checkpoint is specified
         if checkpoint_name != self.active_checkpoint:
@@ -62,7 +62,8 @@ class PipelineManager:
                 self.active_pipe.enable_model_cpu_offload()
                 self.active_pipe.enable_xformers_memory_efficient_attention()
 
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Used: {use_controlnet})")
+                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Used: {use_controlnet}, Scheduler: {scheduler})")
+
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")

@@ -1,5 +1,5 @@
 diffusers==0.31.0
-gradio==5.4.0
+gradio==5.0.1
 modules==1.0.0
 numpy==2.1.2
 Pillow==9.5.0

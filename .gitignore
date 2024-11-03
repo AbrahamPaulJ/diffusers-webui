@@ -7,10 +7,13 @@
 models/
 outputs/
 stable-diffusion-webui/
+tests/
 test.py
 test2.py
 controlimg.jpg
-maskimg.jpg
+inpaintmaskimg.png
+outpaintmaskimg.png
+outpaintinputimg.png
 outputimg1.png
 upscaled_image.jpg
 
