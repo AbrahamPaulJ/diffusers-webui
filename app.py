@@ -354,7 +354,7 @@ class StableDiffusionApp:
              
                 manage_models_tab()
 
-        iface.queue().launch()
+        iface.queue().launch(share=True)
          
     def load_inpaint(self, checkpoint, scheduler, controlnet):
         """Load the pipeline based on changes in the checkpoint or ControlNet selection."""
