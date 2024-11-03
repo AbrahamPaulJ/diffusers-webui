@@ -359,7 +359,7 @@ class StableDiffusionApp:
     def load_inpaint(self, checkpoint, scheduler, controlnet):
         """Load the pipeline based on changes in the checkpoint or ControlNet selection."""
 
-        # Load the pipeline with the determined parameters
+        # Load pipeline with the determined parameters
         self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet)
         return gr.update(interactive=True, value="Generate Image")
     
