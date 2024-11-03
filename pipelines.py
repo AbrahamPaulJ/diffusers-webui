@@ -61,8 +61,10 @@ class PipelineManager:
                     cache_dir=self.model_dir
                 )
                 
-                # Move the pipeline to GPU and activate it
-                self.active_pipe = pipe.to("cuda")
+                # Move the pipeline to GPU if available.
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.active_pipe = pipe.to(device)
+                print(f"Using device: {device}")
                 self.active_checkpoint = checkpoint_name
 
                 print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler})")
