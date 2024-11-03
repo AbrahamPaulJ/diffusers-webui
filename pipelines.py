@@ -1,5 +1,3 @@
-# pipelines.py
-
 import diffusers.schedulers
 from diffusers import (
     StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline,
@@ -15,22 +13,27 @@ class PipelineManager:
         self.active_pipe = None
         self.active_checkpoint = None
         self.active_scheduler = None
-        self.controlnet_model = None  # Store ControlNet model separately
-        self.control_net_enabled = False
+        self.controlnet_model = None
+        self.control_net_type = None  # To track ControlNet type
 
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
                       pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
-                      use_controlnet: bool = False):
-        """Load or update the pipeline as needed, handling model, scheduler and controlnet adjustments."""
+                      controlnet_type: str = "None"):
+        """Load or update the pipeline as needed, handling model, scheduler and ControlNet adjustments."""
+    
+        # Handle None case for self.control_net_type to avoid AttributeError
+        current_control_net_type = self.control_net_type if self.control_net_type is not None else "None"
 
-        # Reload only if a new checkpoint is specified
-        if checkpoint_name != self.active_checkpoint:
-            # Unload the existing pipeline to free memory if a new model is loaded
+        controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
+                                (controlnet_type != "None" and current_control_net_type == "None")                            
+
+        # Reload if a new checkpoint or ControlNet type is specified
+        if (checkpoint_name != self.active_checkpoint) or controlnet_changed:
             if self.active_pipe is not None:
                 del self.active_pipe
                 torch.cuda.empty_cache()
                 print(f"Previous checkpoint {self.active_checkpoint} unloaded.")
-            
+
             try:
                 # Define pipeline class based on type and ControlNet usage
                 pipeline_classes = {
@@ -39,17 +42,19 @@ class PipelineManager:
                     ('txt2img', False): StableDiffusionPipeline,
                 }
                 
-                pipeline_class = pipeline_classes.get((pipeline_type, use_controlnet))
+                # Determine if ControlNet is used
+                is_controlnet = controlnet_type != "None"
+                pipeline_class = pipeline_classes.get((pipeline_type, is_controlnet))
                 if not pipeline_class:
                     raise ValueError("Invalid pipeline type specified.")
-                
+
                 # Load the pipeline from the model or checkpoint
                 load_method = pipeline_class.from_single_file if checkpoint_name.endswith(".ckpt") else pipeline_class.from_pretrained
                 print(f"Loading checkpoint from: {checkpoint_name}")
                 
                 pipe = load_method(
                     os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith(".ckpt") else checkpoint_name,
-                    controlnet=self.controlnet_model if use_controlnet else None,
+                    controlnet=self.controlnet_model if is_controlnet else None,
                     torch_dtype=torch.float16,
                     safety_checker=None,
                     requires_safety_checker=False,
@@ -59,11 +64,8 @@ class PipelineManager:
                 # Move the pipeline to GPU and activate it
                 self.active_pipe = pipe.to("cuda")
                 self.active_checkpoint = checkpoint_name
-                self.active_pipe.enable_model_cpu_offload()
-                self.active_pipe.enable_xformers_memory_efficient_attention()
 
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Used: {use_controlnet}, Scheduler: {scheduler})")
-
+                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
@@ -71,43 +73,65 @@ class PipelineManager:
                 self.active_pipe = None
 
         # Update ControlNet dynamically
-        self.update_controlnet(use_controlnet)
+        self.update_controlnet(controlnet_type)
 
         # Update Scheduler dynamically
-        self.update_scheduler(scheduler)
+        self.update_scheduler(scheduler, controlnet_type)
+        
+        self.active_pipe.enable_model_cpu_offload()
+        self.active_pipe.enable_xformers_memory_efficient_attention()
 
         current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
         print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
 
-    def update_controlnet(self, use_controlnet: bool):
-        """Enable or disable ControlNet without reloading the pipeline."""
-        if use_controlnet and not self.controlnet_model:
-            print("Loading ControlNet model...")
-            try:
-                # Load ControlNet if it hasn't been loaded before
-                self.controlnet_model = ControlNetModel.from_pretrained(
-                    "lllyasviel/control_v11p_sd15_inpaint", 
-                    torch_dtype=torch.float16, 
-                    cache_dir=self.model_dir
-                )
-                print("ControlNet model loaded.")
-            except Exception as e:
-                print(f"Error loading ControlNet: {e}")
-                traceback.print_exc()
-                self.controlnet_model = None
+    def update_controlnet(self, controlnet_type: str):
+        """Enable or disable ControlNet dynamically based on the dropdown selection."""
+        if controlnet_type == "None":
+            self.controlnet_model = None
+            self.control_net_type = None
+            print("ControlNet disabled.")
+        else:
+            controlnet_model_map = {
+                "Depth - lllyasviel/sd-controlnet-depth": "lllyasviel/sd-controlnet-depth",
+                "Canny - lllyasviel/sd-controlnet-canny": "lllyasviel/sd-controlnet-canny",
+            }
+            model_name = controlnet_model_map.get(controlnet_type)
+            if model_name and model_name != self.control_net_type:
+                try:
+                    print(f"Loading ControlNet model: {controlnet_type}")
+                    self.controlnet_model = ControlNetModel.from_pretrained(
+                        model_name,
+                        torch_dtype=torch.float16,
+                        cache_dir=self.model_dir
+                    )
+                    self.control_net_type = model_name
+                    print(f"ControlNet model {controlnet_type} loaded.")
+                except Exception as e:
+                    print(f"Error loading ControlNet {controlnet_type}: {e}")
+                    traceback.print_exc()
+                    self.controlnet_model = None
 
-        # Toggle ControlNet usage in the pipeline
-        self.active_pipe.controlnet = self.controlnet_model if use_controlnet else None
-        self.control_net_enabled = use_controlnet
-        print(f"ControlNet enabled: {self.control_net_enabled}")
-
-    def update_scheduler(self, scheduler: str):
+        # Update pipeline's ControlNet setting
+        if self.active_pipe:
+            self.active_pipe.controlnet = self.controlnet_model
+            
+    def update_scheduler(self, scheduler: str, controlnet_type: str):
         """Change the scheduler dynamically without reloading the pipeline."""
+        # Check if the scheduler is different from the active one
         if scheduler != self.active_scheduler:
             try:
-                # Dynamically load the specified scheduler
-                scheduler_class = getattr(diffusers.schedulers, scheduler)
+                # Determine the appropriate scheduler based on ControlNet usage
+                if controlnet_type == "None":
+                    # Dynamically get the scheduler class by name
+                    scheduler_class = getattr(diffusers.schedulers, scheduler)
+                else:
+                    # Force UniPCMultistepScheduler for ControlNet use
+                    scheduler = "UniPCMultistepScheduler"
+                    scheduler_class = diffusers.schedulers.UniPCMultistepScheduler
+
+                # Load the scheduler based on checkpoint type
                 if not self.active_checkpoint.endswith(".ckpt"):
+                    # Use pretrained scheduler for regular models
                     self.active_pipe.scheduler = scheduler_class.from_pretrained(
                         self.active_checkpoint,
                         subfolder="scheduler",
@@ -116,9 +140,11 @@ class PipelineManager:
                 else:
                     # For .ckpt models, initialize scheduler from config
                     self.active_pipe.scheduler = scheduler_class.from_config(self.active_pipe.scheduler.config)
-                    
+
+                # Update the active scheduler to avoid redundant reloads
                 self.active_scheduler = scheduler
                 print(f"Scheduler updated to {scheduler}")
+
             except Exception as e:
                 print(f"Error setting scheduler {scheduler}: {e}")
                 traceback.print_exc()

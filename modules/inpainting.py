@@ -90,7 +90,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, scheduler, use_controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
+def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, scheduler, controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -174,16 +174,15 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
     }
 
     # Add control_image to the keyword arguments if ControlNet is used
-    if use_controlnet:
-            eta = 1.0
-            control_image = make_inpaint_condition(input_image, mask_pil) if use_controlnet else None
-            control_img_view = Image.fromarray((control_image.squeeze(0).permute(1, 2, 0).numpy() * 255).astype(np.uint8))
-            control_img_view.save("controlimg.jpg")
-            
-            pipe_kwargs["control_image"] = control_image
-            if scheduler=="DDIMScheduler":
-                pipe_kwargs["eta"] = eta
-            
+    print(f"Controlnet: {controlnet}")
+    
+    if controlnet!="None":
+        control_image = create_control_image(input_image, controlnet)
+        control_image.save("controlimg.png")
+        pipe_kwargs["control_image"] = control_image
+     
+
+       
 
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
@@ -214,8 +213,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
 
     #metadata.add_text("use_controlnet", str(use_controlnet))
     #metadata.add_text("generator", str(generator))
-    metadata.add_text("model/checkpoint", str(checkpoint))
-    metadata.add_text("scheduler", str(scheduler))
+    metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
+    metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
+    metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
+    metadata.add_text("controlnet", str(pipeline_manager.control_net_type))
     metadata.add_text("seed", str(seed))
     metadata.add_text("prompt", prompt)
     metadata.add_text("negative_prompt", negative_prompt)
@@ -417,5 +418,49 @@ def resize_to_nearest_multiple_of_8(image):
     # Resize the image to these dimensions
     resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     return resized_image
+
+import cv2
+import torch
+from torchvision import transforms
+from PIL import Image
+
+def create_control_image(input_image, controlnet_type):
+    """Generate control images for ControlNet (canny, depth, etc.) based on controlnet_type."""
+
+    # Convert input_image to grayscale if needed for certain operations
+    if isinstance(input_image, Image.Image):
+        input_image_np = np.array(input_image.convert("RGB"))
+
+    control_image = None
+
+    # Process based on the controlnet type
+    if controlnet_type == "Canny - lllyasviel/sd-controlnet-canny":
+        # Convert the image to grayscale for edge detection
+        gray_image = cv2.cvtColor(input_image_np, cv2.COLOR_RGB2GRAY)
+        # Apply canny edge detection
+        control_image = cv2.Canny(gray_image, 100, 200)  # Adjust thresholds as needed
+        control_image = Image.fromarray(control_image)
+
+    # elif controlnet_type == "Depth":
+    #     # Here you can use a pre-trained depth model if available
+    #     # For demonstration, let's assume you have a model instance named `depth_model`
+    #     with torch.no_grad():
+    #         preprocess = transforms.Compose([
+    #             transforms.ToTensor(),
+    #             transforms.Resize((512, 512)),  # Resize as needed for your model
+    #             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    #         ])
+    #         input_tensor = preprocess(input_image).unsqueeze(0).to("cuda")
+    #         depth_map = depth_model(input_tensor)  # Replace with actual depth model forward pass
+    #         control_image = transforms.ToPILImage()(depth_map.squeeze().cpu())
+
+    # Add other controlnet types here as needed
+
+    # Resize control_image to match input dimensions
+    if control_image and (control_image.size != input_image.size):
+        control_image = control_image.resize(input_image.size, Image.BILINEAR)
+
+    return control_image
+
 
 

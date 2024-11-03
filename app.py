@@ -5,10 +5,10 @@ from modules.inpainting import *
 # from modules.txt2img import generate_txt2img_image
 from modules.upscale import upscale
 from modules.manage_models import manage_models_tab, model_dir
+
 from pipelines import PipelineManager
 from torch import Generator
 import random   
-import time
 
 class StableDiffusionApp:
     def __init__(self, model_dir):
@@ -20,11 +20,7 @@ class StableDiffusionApp:
 
     def setup_gradio_interface(self):
         """Create the Gradio interface with tabs for inpainting, text-to-image, and more."""
-             
-        #     button[aria-label="Transform button"] { 
-        # display: none;  /* Hides the Transform button */ 
-        # }
-        
+               
         with gr.Blocks(
             css=""" 
             .source-wrap { 
@@ -57,11 +53,11 @@ class StableDiffusionApp:
                     with gr.Row(equal_height=True):
                         with gr.Column(scale=1):
                             custom_dimensions = gr.Checkbox(label="Custom Output Dimensions", value=False)
-                            mode = gr.Radio(["Inpaint", "Outpaint"], value="Inpaint", label = "Mode")
                             with gr.Row(equal_height=True):
                                 width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512, visible=False, allow_custom_value=True)
                                 height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=768, visible=False, allow_custom_value=True)
-                            mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=10, value=0, step=0.1)
+                            mode = gr.Radio(["Inpaint", "Outpaint"], value="Inpaint", label = "Mode")
+                            mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=40, value=0, step=0.1)
 
                         with gr.Column(scale=1):
                             fill_setting = gr.Radio(label="Mask", choices=["Generate Inside Mask", "Generate Outside Mask"], value="Generate Inside Mask")
@@ -70,7 +66,11 @@ class StableDiffusionApp:
                         with gr.Column(scale=1):
                             maintain_aspect_ratio = gr.Checkbox(label="Maintain Aspect Ratio (Auto Padding)", value=True)
                             post_process = gr.Checkbox(label="Post-Processing", value=True)
-                            use_controlnet = gr.Checkbox(label="ControlNet", value=False, visible=False)
+                            controlnet_dropdown = gr.Dropdown(
+                            label="Select Controlnet", 
+                            choices=["None", "Depth - lllyasviel/sd-controlnet-depth", "Canny - lllyasviel/sd-controlnet-canny"], 
+                            value="None",
+                        )
                             batch_size = gr.Slider(label="Batch Size", minimum=1, maximum=8, value=1, step=1)
 
                         with gr.Column(scale=1):
@@ -98,9 +98,11 @@ class StableDiffusionApp:
                         # Dropdown for selecting inpainting checkpoint
                         inpainting_checkpoint_dropdown = gr.Dropdown(
                             label="Select Inpaint Checkpoint", 
-                            choices=["stablediffusionapi/realistic-vision-v6.0-b1-inpaint", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
+                            choices=["runwayml/stable-diffusion-inpainting","stablediffusionapi/realistic-vision-v6.0-b1-inpaint", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
                             value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint",
                         )
+                        
+                        
                         # Dropdown for selecting scheduler
                         scheduler_dropdown = gr.Dropdown(
                             label="Select Scheduler", 
@@ -108,11 +110,11 @@ class StableDiffusionApp:
                             value="DPMSolverMultistepScheduler",
                         )
                         
-                    toggle_mode_components = [custom_dimensions, fill_setting, maintain_aspect_ratio, use_controlnet]
+                    toggle_mode_components = [custom_dimensions, fill_setting, maintain_aspect_ratio, controlnet_dropdown]
                     component_count = len(toggle_mode_components)
 
-                    def clear_image():
-                        return None
+                    # def clear_image():
+                    #     return None
                     
                     def clear_gallery():
                         return []
@@ -151,9 +153,14 @@ class StableDiffusionApp:
                     inpaint_input_image.change(fn=reset_brush, inputs=[mode, inpaint_input_image], outputs=[inpaint_mask])
                     mode.change(fn=reset_brush, inputs=[mode, inpaint_input_image], outputs=[inpaint_mask])
                     mode.change(fn=toggle_mode,inputs=mode,outputs=inpaint_mask)
-                    mode.change(fn=toggle_mode_visibility,inputs=mode, outputs=[custom_dimensions, fill_setting, maintain_aspect_ratio, use_controlnet])
+                    mode.change(fn=toggle_mode_visibility,inputs=mode, outputs=toggle_mode_components)
                     
                     inpainting_checkpoint_dropdown.change(
+                        fn=button_is_waiting,
+                        inputs=None,
+                        outputs=generate_button)
+                    
+                    controlnet_dropdown.change(
                         fn=button_is_waiting,
                         inputs=None,
                         outputs=generate_button)
@@ -161,7 +168,13 @@ class StableDiffusionApp:
                     
                     inpainting_checkpoint_dropdown.change(
                         fn=self.load_inpaint,
-                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet],
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown],
+                        outputs=generate_button
+                    )
+                    
+                    controlnet_dropdown.change(
+                        fn=self.load_inpaint,
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown],
                         outputs=generate_button
                     )
 
@@ -188,7 +201,7 @@ class StableDiffusionApp:
                     
                     generate_button.click(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, use_controlnet, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode],
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode],
                         outputs=[output_seed, output_image]
                     )
                     
@@ -290,6 +303,7 @@ class StableDiffusionApp:
                         return (
                             parameters.get("model/checkpoint","stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
                             parameters.get("scheduler","DPMSolverMultistepScheduler"),
+                            parameters.get("controlnet", "None"),
                             parameters.get("seed", -1),            
                             parameters.get("prompt", ""),             
                             parameters.get("negative_prompt", ""),        
@@ -340,20 +354,14 @@ class StableDiffusionApp:
 
         iface.queue().launch()
          
-    def load_inpaint(self, selected_checkpoint, scheduler, use_controlnet, progress=gr.Progress()):
+    def load_inpaint(self, checkpoint, scheduler, controlnet):
         """Load the pipeline based on changes in the checkpoint or ControlNet selection."""
-        progress(0, desc="Loading Checkpoint...")  # Start progress
-
-        # Simulate a loading delay
-        time.sleep(1)  # You can replace this with the actual loading code
 
         # Load the pipeline with the determined parameters
-        self.pipeline_manager.load_pipeline(selected_checkpoint, "inpainting", scheduler, use_controlnet)
-        progress(1, desc="Done.")  # Indicate completion
-
+        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet)
         return gr.update(interactive=True, value="Generate Image")
     
-    def seed_and_gen_inpaint_image(self, checkpoint, scheduler, use_controlnet, seed, *args):
+    def seed_and_gen_inpaint_image(self, checkpoint, scheduler, controlnet, seed, *args):
         """Generate an inpainted image after loading the appropriate model."""
           
         if seed is None or seed == "" or seed == -1:
@@ -366,7 +374,7 @@ class StableDiffusionApp:
         # Generate the inpainted image with the loaded pipeline
         
         return str(seed), generate_inpaint_image(
-            self.pipeline_manager,checkpoint, scheduler, use_controlnet, seed, generator,
+            self.pipeline_manager,checkpoint, scheduler, controlnet, seed, generator,
             *args) 
                
     # def generate_and_load_txt2img_image(self, selected_checkpoint, *args):
