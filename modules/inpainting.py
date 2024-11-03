@@ -128,8 +128,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
         
     if mode=="Outpaint":  
         outpaint_mask = use_crop(inpaint_mask)
-        outpaint_mask = resize_to_max_side(outpaint_mask, target_size=768)
-        outpaint_mask.save("resized_outpaint.png")     
+        outpaint_mask = resize_to_max_side(outpaint_mask, target_size=768)  
         inner_dimensions = get_inner_dimensions(outpaint_mask)
         bounding_box_sides = get_bounding_box_sides(outpaint_mask)
         left, right, top, bottom = bounding_box_sides
