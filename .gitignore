@@ -17,6 +17,7 @@ outpaintmaskimg.png
 outpaintinputimg.png
 outputimg1.png
 upscaled_image.jpg
+.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
