@@ -54,6 +54,6 @@ python app.py
 
 ![Screenshot](images/outpaint.png)
 
-<!-- # Notes
+# Notes
 
-- To use the Upscale tab, you may need to download 'RealESRGAN_x4.pth' manually and place it in the models folder. -->
+- To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically if installed.

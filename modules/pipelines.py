@@ -7,7 +7,11 @@ import torch
 import os
 import traceback
 import importlib.util
+from modules import IN_COLAB
 
+if IN_COLAB:
+    print("Colab environment detected: Safety checker enabled.")
+    
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if device == "cuda" else torch.float32
 has_xformers = importlib.util.find_spec("xformers") is not None
@@ -20,7 +24,7 @@ class PipelineManager:
         self.active_checkpoint = None
         self.active_scheduler = None
         self.controlnet_model = None
-        self.control_net_type = None  # To track ControlNet type
+        self.active_controlnet = None  # To track ControlNet type
 
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
                       pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
@@ -29,7 +33,7 @@ class PipelineManager:
         
     
         # Handle None case for self.control_net_type to avoid AttributeError
-        current_control_net_type = self.control_net_type if self.control_net_type is not None else "None"
+        current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
 
         controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
                                 (controlnet_type != "None" and current_control_net_type == "None")                            
@@ -64,7 +68,7 @@ class PipelineManager:
                     controlnet=self.controlnet_model if is_controlnet else None,
                     torch_dtype=torch_dtype,
                     safety_checker=None,
-                    requires_safety_checker=False,
+                    requires_safety_checker=IN_COLAB,  #True in colab env
                     cache_dir=self.model_dir
                 )
                 
@@ -98,15 +102,16 @@ class PipelineManager:
         """Enable or disable ControlNet dynamically based on the dropdown selection."""
         if controlnet_type == "None":
             self.controlnet_model = None
-            self.control_net_type = None
+            self.active_controlnet = None
             print("ControlNet disabled.")
         else:
-            controlnet_model_map = {
-                "Depth - lllyasviel/sd-controlnet-depth": "lllyasviel/sd-controlnet-depth",
-                "Canny - lllyasviel/sd-controlnet-canny": "lllyasviel/sd-controlnet-canny",
+            controlnet_model_map = {                
+                "Canny - lllyasviel/control_v11p_sd15_canny": "lllyasviel/control_v11p_sd15_canny",
+                "Depth - lllyasviel/control_v11f1p_sd15_depth": "lllyasviel/control_v11f1p_sd15_depth",
+                "OpenPose - lllyasviel/control_v11p_sd15_openpose": "lllyasviel/control_v11p_sd15_openpose"
             }
             model_name = controlnet_model_map.get(controlnet_type)
-            if model_name and model_name != self.control_net_type:
+            if model_name and model_name != self.active_controlnet:
                 try:
                     print(f"Loading ControlNet model: {controlnet_type}")
                     self.controlnet_model = ControlNetModel.from_pretrained(
@@ -114,7 +119,7 @@ class PipelineManager:
                         torch_dtype=torch_dtype,
                         cache_dir=self.model_dir
                     )
-                    self.control_net_type = model_name
+                    self.active_controlnet = model_name
                     print(f"ControlNet model {controlnet_type} loaded.")
                 except Exception as e:
                     print(f"Error loading ControlNet {controlnet_type}: {e}")
@@ -153,7 +158,7 @@ class PipelineManager:
 
                 # Update the active scheduler to avoid redundant reloads
                 self.active_scheduler = scheduler
-                print(f"Scheduler updated to {scheduler}")
+                print(f"Scheduler: {scheduler}")
 
             except Exception as e:
                 print(f"Error setting scheduler {scheduler}: {e}")

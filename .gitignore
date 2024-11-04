@@ -4,6 +4,7 @@
 *.pth
 
 # Ignore models folder in the project root
+.env
 models/
 outputs/
 stable-diffusion-webui/
@@ -17,7 +18,7 @@ outpaintmaskimg.png
 outpaintinputimg.png
 outputimg1.png
 upscaled_image.jpg
-.env
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

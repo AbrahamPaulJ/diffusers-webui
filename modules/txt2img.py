@@ -1,5 +1,5 @@
 from torch import Generator
-from pipelines import PipelineManager
+from modules.pipelines import PipelineManager
 
 def generate_txt2img_image(pipeline_manager: PipelineManager, selected_model, prompt, negative_prompt, width, height, seed, steps, cfg_scale, clip_skip):
     """Generate an image from text prompt using the loaded pipeline."""

@@ -1,17 +1,14 @@
 # modules/inpainting.py
 
 import torch
-from pipelines import PipelineManager
-from PIL import Image, ImageOps, PngImagePlugin, ImageFilter, ImageDraw
+from modules.pipelines import PipelineManager
+from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
 import numpy as np
 from datetime import datetime
 import os
-from modules.manage_models import model_dir
 import time
-from transformers import pipeline
 
-
-def reset_brush(mode, image):
+def retrieve_mask(mode, image):
     if image is None:
         # Return a blank image if there's no input image
         return Image.new("RGBA", (520, 520), (0, 0, 0, 0))
@@ -92,7 +89,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, scheduler, controlnet, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
+def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -125,9 +122,9 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
         mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8))
         mask_pil.save("inpaintmaskimg.png")
         
-        print("Input image size (PIL):", input_image.size)  # Width, Height
-        print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
-        print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
+        # print("Input image size (PIL):", input_image.size)  # Width, Height
+        # print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
+        # print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
         
     if mode=="Outpaint":  
         outpaint_mask = use_crop(inpaint_mask)
@@ -156,9 +153,9 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
         padded_mask_image.save("outpaintmaskimg.png")
         mask_image = np.array(padded_mask_image) / 255     
         input_image=padded_image
-        print("Input image size (PIL):", input_image.size)  # Width, Height
-        print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
-        print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
+        # print("Input image size (PIL):", input_image.size)  # Width, Height
+        # print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
+        # print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
     
     # Prepare the keyword arguments for the pipeline
     pipe_kwargs = {
@@ -177,15 +174,14 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
     }
 
     # Add control_image to the keyword arguments if ControlNet is used
-    print(f"Controlnet: {controlnet}")
+    controlnet = pipeline_manager.active_controlnet
     
-    if controlnet!="None":
+    if controlnet != None:
         control_image = create_control_image(input_image, controlnet)
         control_image.save("controlimg.png")
         pipe_kwargs["control_image"] = control_image
-     
-
-       
+      
+    
 
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
@@ -219,7 +215,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
-    metadata.add_text("controlnet", str(pipeline_manager.control_net_type))
+    metadata.add_text("controlnet", str(pipeline_manager.active_controlnet))
     metadata.add_text("seed", str(seed))
     metadata.add_text("prompt", prompt)
     metadata.add_text("negative_prompt", negative_prompt)
@@ -389,10 +385,10 @@ def get_bounding_box_sides(outpaint_mask):
         bottom_side = outpaint_mask.height - bbox[3]
 
         # Print the results
-        print(f"Left side: {left_side} pixels")
-        print(f"Right side: {right_side} pixels")
-        print(f"Top side: {top_side} pixels")
-        print(f"Bottom side: {bottom_side} pixels")
+        # print(f"Left side: {left_side} pixels")
+        # print(f"Right side: {right_side} pixels")
+        # print(f"Top side: {top_side} pixels")
+        # print(f"Bottom side: {bottom_side} pixels")
         
         # Return the side lengths as a tuple
         return (left_side, right_side, top_side, bottom_side)
@@ -419,38 +415,52 @@ from PIL import Image
 
 def create_control_image(input_image, controlnet_type):
     """Generate control images for ControlNet (canny, depth, etc.) based on controlnet_type."""
-
+    
     # Convert input_image to grayscale if needed for certain operations
     if isinstance(input_image, Image.Image):
         input_image_np = np.array(input_image.convert("RGB"))
+    else:
+        print("Error: input_image is not a PIL Image.")
+        return None
 
     control_image = None
+    controlnet_type = controlnet_type.lower()  # Normalize for case-insensitive matching
+    print(f"ControlNet type: {controlnet_type}")  # Debugging
 
     # Process based on the controlnet type
-    if controlnet_type == "Canny - lllyasviel/sd-controlnet-canny":
+    if "canny" in controlnet_type:
         # Convert the image to grayscale for edge detection
         gray_image = cv2.cvtColor(input_image_np, cv2.COLOR_RGB2GRAY)
+        print("Applying Canny edge detection...")  # Debugging
         # Apply canny edge detection
-        control_image = cv2.Canny(gray_image, 100, 200)  # Adjust thresholds as needed
+        control_image = cv2.Canny(gray_image, 100, 200)
         control_image = Image.fromarray(control_image)
+        return control_image  # Return after canny to prevent overwrites
 
-    elif controlnet_type == "Depth - lllyasviel/sd-controlnet-depth":
-        depth_estimator = pipeline('depth-estimation', device= "cuda" if torch.cuda.is_available() else "cpu")
+    if "depth" in controlnet_type:
+        print("Applying depth estimation...")  # Debugging
+        from transformers import pipeline
+        depth_estimator = pipeline('depth-estimation', device=0 if torch.cuda.is_available() else "cpu")
         image = depth_estimator(input_image)['depth']
         image = np.array(image)
         image = image[:, :, None]
         image = np.concatenate([image, image, image], axis=2)
         control_image = Image.fromarray(image)
-        
-        # del depth_estimator  # Free up memory
-        # if torch.cuda.is_available() :
-        #     torch.cuda.empty_cache() # Optional: clear GPU memory
+        return control_image
+
+    if "openpose" in controlnet_type:
+        print("Applying openpose detection...")  # Debugging
+        from controlnet_aux import OpenposeDetector
+        processor = OpenposeDetector.from_pretrained('lllyasviel/ControlNet')
+        control_image = processor(input_image, hand_and_face=True)
+        return control_image
 
     # Resize control_image to match input dimensions
     if control_image and (control_image.size != input_image.size):
         control_image = control_image.resize(input_image.size, Image.BILINEAR)
 
     return control_image
+
 
 
 
