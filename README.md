@@ -37,11 +37,17 @@ python app.py
 
         - Manual Brush Tool: Allows users to create the image mask (inpaint mode).
         
-        - Transform Tool: Enables cropping of the outpaint canvas (outpaint mode).
-        
         - Gaussian Blur Slider: For applying blur to the mask edges.
         
         - Post-Processing Option: Preserves non-masked areas during processing.
+
+        - Outpaint Mode: Outpainting is done using the inpaint pipeline, where the a black background canvas is used as a mask.       
+              
+              - The transform tool allows cropping of the image placed on the black canvas, which makes outpainting in any direction easy.
+
+              - You can choose where to place the image on the canvas using the "Image Positioned at:" option.
+
+              - You can control output size by choosing "Maximum Width/Height".
 
 - Image Upscale tab: Includes ESRGAN upscaling options.
 

@@ -53,7 +53,7 @@ class StableDiffusionApp:
                     with gr.Row(equal_height=True):
                         with gr.Column(scale=1):
                             custom_dimensions = gr.Checkbox(label="Custom Output Dimensions", value=False)
-                            with gr.Row(equal_height=True):
+                            with gr.Row():
                                 width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512, visible=False, allow_custom_value=True)
                                 height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=768, visible=False, allow_custom_value=True)
                             mode = gr.Radio(["Inpaint", "Outpaint"], value="Inpaint", label = "Mode")
@@ -62,7 +62,9 @@ class StableDiffusionApp:
                         with gr.Column(scale=1):
                             fill_setting = gr.Radio(label="Mask", choices=["Generate Inside Mask", "Generate Outside Mask"], value="Generate Inside Mask")
                             denoise_strength = gr.Slider(label="Denoise Strength", minimum=0, maximum=1, value=1, step=0.01)
-
+                            outpaint_img_pos = gr.Radio(label="Image Positioned at:", choices=["Center", "Top", "Bottom"], value="Center", visible=False)
+                            outpaint_max_dim = gr.Dropdown(label="Maximum Width/Height", choices=[512, 768, 1024], value=768, visible=False, allow_custom_value=True)
+                            
                         with gr.Column(scale=1):
                             maintain_aspect_ratio = gr.Checkbox(label="Maintain Aspect Ratio (Auto Padding)", value=True)
                             post_process = gr.Checkbox(label="Post-Processing", value=True)
@@ -86,7 +88,7 @@ class StableDiffusionApp:
                     with gr.Row(equal_height=True):
                         with gr.Group():
                             seed = gr.Number(label="Seed", value=-1)
-                            generator = gr.State(Generator().manual_seed(random.randint(0, 2**32 - 1)))  # Initial generator state
+                            #generator = gr.State(Generator().manual_seed(random.randint(0, 2**32 - 1)))  # Initial generator state
                             with gr.Column():
                                 reset_seed_btn = gr.Button("🔄", size='lg')
                                 random_seed_btn = gr.Button("🎲", size='lg')
@@ -101,8 +103,7 @@ class StableDiffusionApp:
                             choices=["runwayml/stable-diffusion-inpainting","stablediffusionapi/realistic-vision-v6.0-b1-inpaint", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
                             value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint",
                         )
-                        
-                        
+                            
                         # Dropdown for selecting scheduler
                         scheduler_dropdown = gr.Dropdown(
                             label="Select Scheduler", 
@@ -110,8 +111,12 @@ class StableDiffusionApp:
                             value="DPMSolverMultistepScheduler",
                         )
                         
-                    toggle_mode_components = [custom_dimensions, fill_setting, maintain_aspect_ratio]
-                    component_count = len(toggle_mode_components)
+                    toggle_mode_hide_components = [custom_dimensions, fill_setting, maintain_aspect_ratio]
+                    component_hide_count = len(toggle_mode_hide_components)
+                    
+                    toggle_mode_show_components = [outpaint_img_pos,outpaint_max_dim]
+                    component_show_count = len(toggle_mode_show_components)
+                    
 
                     # def clear_image():
                     #     return None
@@ -137,10 +142,15 @@ class StableDiffusionApp:
                         if mode=="Outpaint":
                             return gr.update(brush=False, transforms=('crop'))
                         
-                    def toggle_mode_visibility(mode):
+                    def toggle_mode_hide(mode):
                         # Determine the visibility state based on the mode
-                        visible = (mode == "Inpaint")  # True if Inpaint else False
-                        updates = [gr.update(visible=visible) for _ in range(component_count)] 
+                        visible = (mode == "Inpaint")  # True if Inpaint 
+                        updates = [gr.update(visible=visible) for _ in range(component_hide_count)] 
+                        return updates  # Return the list of updates
+                    
+                    def toggle_mode_show(mode):
+                        visible = (mode == "Outpaint")  # True if Outpaint
+                        updates = [gr.update(visible=visible) for _ in range(component_show_count)] 
                         return updates  # Return the list of updates
 
                     def reset_seed():
@@ -150,27 +160,25 @@ class StableDiffusionApp:
                         return random.randint(0, 2**32 - 1)
 
                     # Listen for events
-                    inpaint_input_image.change(fn=retrieve_mask, inputs=[mode, inpaint_input_image], outputs=[inpaint_mask])
-                    mode.change(fn=retrieve_mask, inputs=[mode, inpaint_input_image], outputs=[inpaint_mask])
+                    inpaint_input_image.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
+                    outpaint_img_pos.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
+                    mode.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
                     mode.change(fn=toggle_mode,inputs=mode,outputs=inpaint_mask)
-                    mode.change(fn=toggle_mode_visibility,inputs=mode, outputs=toggle_mode_components)
-                    
-                    inpainting_checkpoint_dropdown.change(
+                    mode.change(fn=toggle_mode_hide,inputs=mode, outputs=toggle_mode_hide_components)
+                    mode.change(fn=toggle_mode_show,inputs=mode, outputs=toggle_mode_show_components)
+                           
+                    gr.on(
+                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change],
                         fn=button_is_waiting,
                         inputs=None,
-                        outputs=generate_button)
-                    
-                    controlnet_dropdown.change(
-                        fn=button_is_waiting,
-                        inputs=None,
-                        outputs=generate_button)
-                        
-                    
+                        outputs=generate_button
+                    )
+                            
                     gr.on(
                         triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
                         fn=self.load_inpaint,
                         inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown],
-                        outputs=generate_button,
+                        outputs=generate_button
                     )
 
                     reset_seed_btn.click(fn=reset_seed, outputs=seed)
@@ -196,7 +204,7 @@ class StableDiffusionApp:
                     
                     generate_button.click(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode],
+                        inputs=[seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim],
                         outputs=[output_seed, output_image]
                     )
                     
@@ -293,7 +301,9 @@ class StableDiffusionApp:
                             parameters.get("custom_dimensions", "True") == "True",  
                             float(parameters.get("denoise_strength", 1.0)),  
                             int(parameters.get("batch_size", 1)),
-                            parameters.get("mode","Inpaint")         
+                            parameters.get("mode","Inpaint"),
+                            parameters.get("image_positioned_at","Center"),
+                            parameters.get("maximum_width/height", 768),        
                         )
                         
                         

@@ -8,7 +8,7 @@ from datetime import datetime
 import os
 import time
 
-def retrieve_mask(mode, image):
+def retrieve_mask(mode, outpaint_img_pos, image):
     if image is None:
         # Return a blank image if there's no input image
         return Image.new("RGBA", (520, 520), (0, 0, 0, 0))
@@ -43,12 +43,22 @@ def retrieve_mask(mode, image):
         # Create a black image of 500x500
         final_image = Image.new("RGBA", (500, 500), (0, 0, 0, 255))
 
-        # Paste the resized image onto the black background, centered
-        x_offset = (500 - new_width) // 2
-        y_offset = (500 - new_height) // 2
+        # Calculate offsets based on `outpaint_img_pos`
+        if outpaint_img_pos == "Center":
+            x_offset = (500 - new_width) // 2
+            y_offset = (500 - new_height) // 2
+        elif outpaint_img_pos == "Top":
+            x_offset = (500 - new_width) // 2
+            y_offset = 0  # Align to top center
+        elif outpaint_img_pos == "Bottom":
+            x_offset = (500 - new_width) // 2
+            y_offset = 500 - new_height  # Align to bottom center
+
+        # Paste the resized image onto the black background at the calculated position
         final_image.paste(image, (x_offset, y_offset))
 
         return final_image  # Return the combined image for Outpaint mode
+
 
 
 
@@ -89,16 +99,16 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode):
+def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
-    width, height = int(width), int(height)
     
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
      
     if mode=="Inpaint":
+        width, height = int(width), int(height)
         if not custom_dimensions:
             width, height = auto_select_dimensions(input_image)
             print(f"Target dimensions are {height}x{width}")
@@ -126,9 +136,11 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
         # print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
         # print("Mask image shape (NumPy):", mask_image.shape)    # e.g., (height, width, channels or none if grayscale)
         
-    if mode=="Outpaint":  
+    if mode=="Outpaint":
+         
         outpaint_mask = use_crop(inpaint_mask)
-        outpaint_mask = resize_to_max_side(outpaint_mask, target_size=768)  
+        outpaint_max_dim = int(outpaint_max_dim) 
+        outpaint_mask = resize_to_max_side(outpaint_mask, target_size = outpaint_max_dim)  
         inner_dimensions = get_inner_dimensions(outpaint_mask)
         bounding_box_sides = get_bounding_box_sides(outpaint_mask)
         left, right, top, bottom = bounding_box_sides
@@ -185,14 +197,21 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
 
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
-
+    
+    if mode=="Inpaint":
+        if not maintain_aspect_ratio and post_process:
+            input_image = input_image.resize(generated_images[0].size, Image.Resampling.LANCZOS)
+            mask_image = Image.fromarray(mask_image)
+            mask_image = mask_image.resize(generated_images[0].size, Image.Resampling.LANCZOS)
+            mask_image = np.array(mask_image)/255.0
+            
     processed_images = []
+    input_image_np = np.array(input_image)
 
     for generated_image in generated_images:
             if post_process:
-                # Convert images to numpy arrays for pixel-level manipulation
+                    
                 generated_image_np = np.array(generated_image)
-                input_image_np = np.array(input_image)
 
                 # Combine the original image with the inpainted image using the mask
                 postprocess_np = np.where(np.expand_dims(mask_image, axis=-1) > 0.5, input_image_np, generated_image_np)
@@ -235,6 +254,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
     metadata.add_text("post_process", str(post_process))
     metadata.add_text("denoise_strength", str(denoise_strength))
     metadata.add_text("batch_size", str(batch_size))
+    if mode=="Outpaint":
+        metadata.add_text("image_positioned_at", str(outpaint_img_pos))
+        metadata.add_text("maximum_width/height", str(outpaint_max_dim))    
+        
     
     output_directory = "outputs/inpaint" if mode == "Inpaint" else "outputs/outpaint"
     # Ensure the output directory exists

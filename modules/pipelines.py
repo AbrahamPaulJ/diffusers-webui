@@ -88,7 +88,7 @@ class PipelineManager:
         self.update_controlnet(controlnet_type)
 
         # Update Scheduler dynamically
-        self.update_scheduler(scheduler, controlnet_type)
+        self.update_scheduler(scheduler)
         
         if device == "cuda":
             self.active_pipe.enable_model_cpu_offload()
@@ -130,19 +130,12 @@ class PipelineManager:
         if self.active_pipe:
             self.active_pipe.controlnet = self.controlnet_model
             
-    def update_scheduler(self, scheduler: str, controlnet_type: str):
+    def update_scheduler(self, scheduler: str):
         """Change the scheduler dynamically without reloading the pipeline."""
         # Check if the scheduler is different from the active one
         if scheduler != self.active_scheduler:
             try:
-                # Determine the appropriate scheduler based on ControlNet usage
-                if controlnet_type == "None":
-                    # Dynamically get the scheduler class by name
-                    scheduler_class = getattr(diffusers.schedulers, scheduler)
-                else:
-                    # Force UniPCMultistepScheduler for ControlNet use
-                    scheduler = "UniPCMultistepScheduler"
-                    scheduler_class = diffusers.schedulers.UniPCMultistepScheduler
+                scheduler_class = getattr(diffusers.schedulers, scheduler)
 
                 # Load the scheduler based on checkpoint type
                 if not self.active_checkpoint.endswith(".ckpt"):
