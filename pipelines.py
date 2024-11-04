@@ -11,6 +11,7 @@ import importlib.util
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if device == "cuda" else torch.float32
 has_xformers = importlib.util.find_spec("xformers") is not None
+print(f"xformers available: {has_xformers}")
 
 class PipelineManager:
     def __init__(self, model_dir: str):

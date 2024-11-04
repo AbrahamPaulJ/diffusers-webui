@@ -8,6 +8,8 @@ from datetime import datetime
 import os
 from modules.manage_models import model_dir
 import time
+from transformers import pipeline
+
 
 def reset_brush(mode, image):
     if image is None:
@@ -94,6 +96,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, checkpoint, schedu
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
+    width, height = int(width), int(height)
     
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
@@ -305,16 +308,6 @@ def add_padding(image, target_width, target_height, pad_color=None):
     # Ensure the pad_color is appropriate for the image mode
     return ImageOps.expand(image, padding, pad_color)
 
-def make_inpaint_condition(image, image_mask):
-    image = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-    image_mask = np.array(image_mask.convert("L")).astype(np.float32) / 255.0
-
-    assert image.shape[0:1] == image_mask.shape[0:1], "image and image_mask must have the same image size"
-    image[image_mask > 0.5] = -1.0  # set as masked pixel
-    image = np.expand_dims(image, 0).transpose(0, 3, 1, 2)
-    image = torch.from_numpy(image)
-    return image
-
 def auto_select_dimensions(image, target_sizes=[512, 768, 1024]):
     # Get the original dimensions of the image
     original_width, original_height = image.size
@@ -441,20 +434,17 @@ def create_control_image(input_image, controlnet_type):
         control_image = cv2.Canny(gray_image, 100, 200)  # Adjust thresholds as needed
         control_image = Image.fromarray(control_image)
 
-    # elif controlnet_type == "Depth":
-    #     # Here you can use a pre-trained depth model if available
-    #     # For demonstration, let's assume you have a model instance named `depth_model`
-    #     with torch.no_grad():
-    #         preprocess = transforms.Compose([
-    #             transforms.ToTensor(),
-    #             transforms.Resize((512, 512)),  # Resize as needed for your model
-    #             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    #         ])
-    #         input_tensor = preprocess(input_image).unsqueeze(0).to("cuda")
-    #         depth_map = depth_model(input_tensor)  # Replace with actual depth model forward pass
-    #         control_image = transforms.ToPILImage()(depth_map.squeeze().cpu())
-
-    # Add other controlnet types here as needed
+    elif controlnet_type == "Depth - lllyasviel/sd-controlnet-depth":
+        depth_estimator = pipeline('depth-estimation', device= "cuda" if torch.cuda.is_available() else "cpu")
+        image = depth_estimator(input_image)['depth']
+        image = np.array(image)
+        image = image[:, :, None]
+        image = np.concatenate([image, image, image], axis=2)
+        control_image = Image.fromarray(image)
+        
+        # del depth_estimator  # Free up memory
+        # if torch.cuda.is_available() :
+        #     torch.cuda.empty_cache() # Optional: clear GPU memory
 
     # Resize control_image to match input dimensions
     if control_image and (control_image.size != input_image.size):
