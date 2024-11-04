@@ -8,7 +8,6 @@ from modules.manage_models import manage_models_tab, model_dir
 from modules.pipelines import PipelineManager
 from torch import Generator
 import random   
-from dotenv import load_dotenv
 
 class StableDiffusionApp:
     def __init__(self, model_dir):
@@ -393,7 +392,6 @@ class StableDiffusionApp:
         
 # Main execution
 if __name__ == "__main__":
-    load_dotenv()
-    is_local = os.getenv("DEV_ENV") == "true"
+    is_local = os.getenv("MYAPP_DEV_ENV") == "true"
     app = StableDiffusionApp(model_dir)
 
