@@ -43,9 +43,11 @@ python app.py
 
         - Outpaint Mode: Outpainting is done using the inpaint pipeline, where the a black background canvas is used as a mask.       
               
-              - The transform tool allows cropping of the image placed on the black canvas, which makes outpainting in any direction easy.
+              - The transform tool allows cropping of the image placed on the black canvas, 
+              which makes outpainting in any direction easy.
 
-              - You can choose where to place the image on the canvas using the "Image Positioned at:" option.
+              - You can choose where to place the image on the canvas using the 
+              "Image Positioned at:" option.
 
               - You can control output size by choosing "Maximum Width/Height".
 
