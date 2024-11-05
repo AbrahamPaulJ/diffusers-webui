@@ -7,8 +7,9 @@ import numpy as np
 from datetime import datetime
 import os
 import time
+from modules import is_local
 
-def retrieve_mask(mode, outpaint_img_pos, image):
+def retrieve_mask(mode = "Inpaint", outpaint_img_pos= "Center", image= None):
     if image is None:
         # Return a blank image if there's no input image
         return Image.new("RGBA", (520, 520), (0, 0, 0, 0))
@@ -64,16 +65,10 @@ def retrieve_mask(mode, outpaint_img_pos, image):
 
 
 def use_brush(image):
-    if image is None:
-        return Image.new("RGBA", (520, 520), (255, 255, 255, 255))  # Return a white image if no input
+
     print("use_brush function was accessed.")
-    # Extract layers from the image editor value
     layers = image["layers"]
-    # Create the brush mask from the first layer (assuming brush strokes are stored here)
-    brush_mask = layers[0] if layers and layers[0] is not None else None
-    # If there's no brush mask, return a blank white image
-    if brush_mask is None:
-        return Image.new("RGBA", (520, 520), (255, 255, 255, 255))  # White image as fallback
+    brush_mask = layers[0] 
     # Convert brush_mask to a numpy array
     brush_mask = np.array(brush_mask)
     # Create a white RGBA background
@@ -99,7 +94,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim):
+def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -112,7 +107,8 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
         if not custom_dimensions:
             width, height = auto_select_dimensions(input_image)
             print(f"Target dimensions are {height}x{width}")
-               
+                 
+        full_mask = inpaint_mask
         inpaint_mask = use_brush(inpaint_mask)
         inpaint_mask = inpaint_mask.resize((input_image.width, input_image.height), Image.Resampling.LANCZOS) 
         
@@ -128,9 +124,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
             
         mask_array = np.array(inpaint_mask) / 255.0
 
-        mask_image = mask_array if fill_setting == "Generate Inside Mask" else 1.0 - mask_array
-        mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8))
-        mask_pil.save("inpaintmaskimg.png")
+        mask_image = mask_array if fill_setting == "Inpaint Masked" else 1.0 - mask_array
+        if is_local:
+            mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8))
+            mask_pil.save("inpaintmaskimg.png") 
         
         # print("Input image size (PIL):", input_image.size)  # Width, Height
         # print("Input image color mode (PIL):", input_image.mode)  # e.g., RGB, RGBA, L
@@ -153,7 +150,8 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
         padded_image.paste(resized_input_image.convert('RGB'), (left, top))  # Ensure resized_input_image is in RGB
         # `padded_image` now has the resized image centered with black padding on all sides
         padded_image = resize_to_nearest_multiple_of_8(padded_image)
-        padded_image.save("outpaintinputimg.png")
+        if is_local:
+            padded_image.save("outpaintinputimg.png")
         width, height = padded_image.size
         mask_image = Image.new("RGBA", (resized_input_image.width, resized_input_image.height), (255, 255, 255, 255))
         padded_mask_image = Image.new("RGBA", (padded_width, padded_height), (0, 0, 0, 255))  # Black background
@@ -162,7 +160,8 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
 
         if mask_blur > 0:    
             padded_mask_image = padded_mask_image.filter(ImageFilter.GaussianBlur(mask_blur))
-        padded_mask_image.save("outpaintmaskimg.png")
+        if is_local:
+            padded_mask_image.save("outpaintmaskimg.png")
         mask_image = np.array(padded_mask_image) / 255     
         input_image=padded_image
         # print("Input image size (PIL):", input_image.size)  # Width, Height
@@ -190,11 +189,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
     
     if controlnet != None:
         control_image = create_control_image(input_image, controlnet)
-        control_image.save("controlimg.png")
+        if is_local:
+            control_image.save("controlimg.png")
         pipe_kwargs["control_image"] = control_image
       
-    
-
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
     
@@ -226,15 +224,28 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
     # Save the first image with its generation metadata
     
     first_output_image = processed_images[0]
+    
+    if mode=="Inpaint":
+        full_mask = full_mask["layers"][0]
+        output_directory = "outputs/inpaint_masks"
+        # Ensure the output directory exists
+        os.makedirs(output_directory, exist_ok=True)
+        # Save the first image with its generation metadata
+        mask_name = f"mask_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+        mask_path = os.path.join(output_directory, mask_name)
+        full_mask.save(mask_path)
+     
+    output_directory = "outputs/inpaint"   
+    output_name = f"output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+    output_path = os.path.join(output_directory, output_name)
+    
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
-
-    #metadata.add_text("use_controlnet", str(use_controlnet))
     #metadata.add_text("generator", str(generator))
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
-    metadata.add_text("controlnet", str(pipeline_manager.active_controlnet))
+    metadata.add_text("controlnet", str(controlnet_name))
     metadata.add_text("seed", str(seed))
     metadata.add_text("prompt", prompt)
     metadata.add_text("negative_prompt", negative_prompt)
@@ -247,6 +258,8 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
     metadata.add_text("mode", str(mode))
     #metadata.add_text("inpaint_mask", str(inpaint_mask))
     if mode=="Inpaint":
+        metadata.add_text("output_path", output_path)
+        metadata.add_text("mask_path", mask_path)
         metadata.add_text("fill_setting", str(fill_setting))
         metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
         metadata.add_text("custom_dimensions", str(custom_dimensions))
@@ -264,12 +277,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, seed, generator, p
     os.makedirs(output_directory, exist_ok=True)
 
     # Save the first image with its generation metadata
-    first_output_image.save(
-        os.path.join(output_directory, f"output_image_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"), 
-        pnginfo=metadata
-    )
+    first_output_image.save(output_path, pnginfo=metadata)
     
-    first_output_image.save("outputimg1.png", pnginfo=metadata)
+    if is_local:
+        first_output_image.save("outputimg1.png")
         
     return processed_images  # Return as a list of images for Gradio's Gallery    
     
@@ -461,7 +472,7 @@ def create_control_image(input_image, controlnet_type):
         return control_image  # Return after canny to prevent overwrites
 
     if "depth" in controlnet_type:
-        print("Applying depth estimation...")  # Debugging
+        print("Applying Depth estimation...")  # Debugging
         from transformers import pipeline
         depth_estimator = pipeline('depth-estimation', device=0 if torch.cuda.is_available() else "cpu")
         image = depth_estimator(input_image)['depth']
@@ -472,7 +483,7 @@ def create_control_image(input_image, controlnet_type):
         return control_image
 
     if "openpose" in controlnet_type:
-        print("Applying openpose detection...")  # Debugging
+        print("Applying OpenPose detection...")  # Debugging
         from controlnet_aux import OpenposeDetector
         processor = OpenposeDetector.from_pretrained('lllyasviel/ControlNet')
         control_image = processor(input_image, hand_and_face=True)
@@ -483,6 +494,33 @@ def create_control_image(input_image, controlnet_type):
         control_image = control_image.resize(input_image.size, Image.BILINEAR)
 
     return control_image
+
+def remove_background(image: Image.Image, threshold: int = 200) -> Image.Image:
+    image = image.convert("RGBA")
+    data = image.getdata()
+    new_data = []
+    for item in data:
+        avg = sum(item[:3]) / 3
+        if avg > threshold:
+            new_data.append((0, 0, 0, 0))  # Make white pixels transparent
+        else:
+            new_data.append(item)  # Keep other colors
+
+    image.putdata(new_data)
+    return image
+
+def create_composite(background: Image.Image, layer: Image.Image) -> Image.Image:
+    # Ensure both images are in RGBA mode to handle transparency
+    background = background.convert("RGBA")
+    layer = layer.convert("RGBA")
+    
+    # Create a copy of the background to avoid modifying the original
+    composite = background.copy()
+    
+    # Paste the layer onto the background
+    composite.paste(layer, (0, 0), layer)  # Use layer as its own mask to handle transparency
+    
+    return composite    
 
 
 

@@ -31,7 +31,6 @@ class PipelineManager:
                       controlnet_type: str = "None"):
         """Load or update the pipeline as needed, handling model, scheduler and ControlNet adjustments."""
         
-    
         # Handle None case for self.control_net_type to avoid AttributeError
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
 
