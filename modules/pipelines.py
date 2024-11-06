@@ -25,12 +25,13 @@ class PipelineManager:
         self.active_scheduler = None
         self.controlnet_model = None
         self.active_controlnet = None  # To track ControlNet type
+        self.active_lora = None
 
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                      pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
-                      controlnet_type: str = "None"):
-        """Load or update the pipeline as needed, handling model, scheduler and ControlNet adjustments."""
-        
+                  pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
+                  controlnet_type: str = "None", lora_name: str = None):  # New parameter for LoRA
+        """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
+    
         # Handle None case for self.control_net_type to avoid AttributeError
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
 
@@ -59,11 +60,12 @@ class PipelineManager:
                     raise ValueError("Invalid pipeline type specified.")
 
                 # Load the pipeline from the model or checkpoint
-                load_method = pipeline_class.from_single_file if checkpoint_name.endswith(".ckpt") else pipeline_class.from_pretrained
+                load_method = pipeline_class.from_single_file if checkpoint_name.endswith((".ckpt", ".safetensors")) else pipeline_class.from_pretrained
+                print(load_method)
                 print(f"Loading checkpoint from: {checkpoint_name}")
                 
                 pipe = load_method(
-                    os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith(".ckpt") else checkpoint_name,
+                    os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
                     controlnet=self.controlnet_model if is_controlnet else None,
                     torch_dtype=torch_dtype,
                     safety_checker=None,
@@ -76,7 +78,7 @@ class PipelineManager:
                 print(f"Using device: {device}")
                 self.active_checkpoint = checkpoint_name
 
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler})")
+                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRA: {lora_name})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
@@ -87,7 +89,10 @@ class PipelineManager:
         self.update_controlnet(controlnet_type)
 
         # Update Scheduler dynamically
-        self.update_scheduler(scheduler)
+        self.update_scheduler(scheduler, controlnet_changed)
+        
+        # Update the LoRA if a name is provided
+        self.update_lora(lora_name, controlnet_changed)
         
         if device == "cuda":
             self.active_pipe.enable_model_cpu_offload()
@@ -129,15 +134,15 @@ class PipelineManager:
         if self.active_pipe:
             self.active_pipe.controlnet = self.controlnet_model
             
-    def update_scheduler(self, scheduler: str):
+    def update_scheduler(self, scheduler: str, controlnet_changed):
         """Change the scheduler dynamically without reloading the pipeline."""
-        # Check if the scheduler is different from the active one
-        if scheduler != self.active_scheduler:
+        # Check if the scheduler is different from the active one or if controlnet has changed
+        if scheduler != self.active_scheduler or controlnet_changed:
             try:
                 scheduler_class = getattr(diffusers.schedulers, scheduler)
 
                 # Load the scheduler based on checkpoint type
-                if not self.active_checkpoint.endswith(".ckpt"):
+                if not self.active_checkpoint.endswith((".ckpt", ".safetensors")):
                     # Use pretrained scheduler for regular models
                     self.active_pipe.scheduler = scheduler_class.from_pretrained(
                         self.active_checkpoint,
@@ -145,13 +150,31 @@ class PipelineManager:
                         cache_dir=self.model_dir
                     )
                 else:
-                    # For .ckpt models, initialize scheduler from config
+                    # For ckpt or safetensor models, initialize scheduler from config
                     self.active_pipe.scheduler = scheduler_class.from_config(self.active_pipe.scheduler.config)
 
                 # Update the active scheduler to avoid redundant reloads
                 self.active_scheduler = scheduler
-                print(f"Scheduler: {scheduler}")
+                print(f"Scheduler updated to: {scheduler}")
 
             except Exception as e:
                 print(f"Error setting scheduler {scheduler}: {e}")
                 traceback.print_exc()
+
+    def update_lora(self, lora_name: str, controlnet_changed):
+        """Update the LoRA weights if a name is provided, handling controlnet changes if necessary."""
+        if lora_name:
+            lora_path = os.path.join("loras", lora_name)  # Construct full path to the LoRA model
+
+            if self.active_lora != lora_name or controlnet_changed:  # Check if the LoRA or controlnet changed
+                if self.active_pipe is not None:
+                    # Load the LoRA weights
+                    self.active_pipe.load_lora_weights(lora_path)
+                    print(f"Loaded LoRA weights from: {lora_path}")
+                self.active_lora = lora_name  # Update active LoRA
+            else:
+                print(f"LoRA weights already loaded: {self.active_lora}")
+        else:
+            print("No LoRA selected.")
+            self.active_lora = None  # Reset active LoRA if none is provided
+

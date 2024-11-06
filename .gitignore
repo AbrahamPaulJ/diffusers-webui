@@ -6,6 +6,7 @@
 # Ignore models folder in the project root
 .env
 models/
+loras/
 outputs/
 stable-diffusion-webui/
 .gradio/

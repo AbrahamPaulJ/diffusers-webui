@@ -22,6 +22,11 @@ class StableDiffusionApp:
         """Create the Gradio interface with tabs for inpainting, text-to-image, and more."""
                
         with gr.Blocks(
+            
+            #            # button[aria-label="Clear"] {
+            #     display: none !important;
+            # }
+            
             css=""" 
             .source-wrap { 
                 display: none;  /* Hides the entire container with the buttons */ 
@@ -32,7 +37,8 @@ class StableDiffusionApp:
             .layer-wrap { 
                 display: none;  /* Hides the layer button */ 
             }
-
+            button[aria-label="Close"] {
+                display: none !important;
             """,
             theme=gr.themes.Default(primary_hue="green", secondary_hue="pink")
         ) as iface:
@@ -43,6 +49,33 @@ class StableDiffusionApp:
                 with gr.TabItem("Inpainting"):
                     brush = gr.Brush(colors=["#000000"], color_mode='fixed',default_size=50)
                     
+                    with gr.Row():
+                        # Dropdown for selecting inpainting checkpoint
+                        inpainting_checkpoint_dropdown = gr.Dropdown(
+                            label="Select Inpaint Checkpoint", 
+                            choices=["runwayml/stable-diffusion-inpainting","stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
+                                     "ponyRealism_V22MainVAE.safetensors", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
+                            value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint"
+                        )
+                            
+                        # Dropdown for selecting scheduler
+                        scheduler_dropdown = gr.Dropdown(
+                            label="Select Scheduler", 
+                            choices=["DPMSolverMultistepScheduler", "DDIMScheduler", "EulerDiscreteScheduler", "EulerAncestralDiscreteScheduler","LMSDiscreteScheduler", "HeunDiscreteScheduler"], 
+                            value="DPMSolverMultistepScheduler",
+                        )
+                        
+                        loras_folder = "loras"
+                        choices = [file for file in os.listdir(loras_folder) if file.endswith(".safetensors")]
+                        empty_value = "No LoRAs available."
+                        default_value = choices[0] if choices else empty_value
+
+                        lora_dropdown = gr.Dropdown(
+                            label="Select LoRA",
+                            choices=choices if choices else [empty_value],
+                            value=default_value
+                        )
+                                       
                     with gr.Row():
                         inpaint_input_image = gr.Image(type="pil", label="Input Image", height=600)
                         inpaint_mask = gr.ImageEditor(type="pil", label="Mask Editor", height=600, brush=brush, transforms=(), sources=('clipboard'), placeholder="Mask Preview", layers=False)
@@ -72,12 +105,13 @@ class StableDiffusionApp:
                             choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
                             value="None"
                         )
+                            controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01)
                             batch_size = gr.Slider(label="Batch Size", minimum=1, maximum=8, value=1, step=1)
 
                         with gr.Column(scale=1):
                             generate_button = gr.Button(value="Generate Image")
                             clear_button = gr.Button("Clear Image")
-                            upscalefour = gr.Button("Upscale to 4x")
+                            #upscalefour = gr.Button("Upscale to 4x")
                             output_seed = gr.Textbox(value=None, label="Output Seed", interactive=False, show_copy_button=True,show_label=True, visible=False)
 
                     with gr.Row():
@@ -93,20 +127,7 @@ class StableDiffusionApp:
                         cfg_scale =  gr.Slider(label="CFG Scale", value=7, minimum=0, maximum=20, step=0.1)
                         clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2, 3], value=0)
 
-                    with gr.Row():
-                        # Dropdown for selecting inpainting checkpoint
-                        inpainting_checkpoint_dropdown = gr.Dropdown(
-                            label="Select Inpaint Checkpoint", 
-                            choices=["runwayml/stable-diffusion-inpainting","stablediffusionapi/realistic-vision-v6.0-b1-inpaint", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
-                            value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint",
-                        )
-                            
-                        # Dropdown for selecting scheduler
-                        scheduler_dropdown = gr.Dropdown(
-                            label="Select Scheduler", 
-                            choices=["DPMSolverMultistepScheduler", "DDIMScheduler", "EulerDiscreteScheduler", "EulerAncestralDiscreteScheduler","LMSDiscreteScheduler", "HeunDiscreteScheduler"], 
-                            value="DPMSolverMultistepScheduler",
-                        )
+
                         
                     toggle_mode_hide_components = [custom_dimensions, fill_setting, maintain_aspect_ratio]
                     component_hide_count = len(toggle_mode_hide_components)
@@ -123,6 +144,9 @@ class StableDiffusionApp:
 
                     def make_visible():
                         return gr.update(visible=True)
+                    
+                    def hide():
+                        return gr.update(visible=False)
                                             
                     def button_is_waiting():
                         return gr.update(interactive=False, value="Loading...")
@@ -158,6 +182,8 @@ class StableDiffusionApp:
 
                     def random_seed():
                         return random.randint(0, 2**32 - 1)
+                    
+                    
 
                     # Listen for events
                     inpaint_input_image.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
@@ -168,16 +194,16 @@ class StableDiffusionApp:
                     mode.change(fn=toggle_mode_show,inputs=mode, outputs=toggle_mode_show_components)
                            
                     gr.on(
-                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change],
+                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change, lora_dropdown.change],
                         fn=button_is_waiting,
                         inputs=None,
                         outputs=generate_button
                     )
                             
                     gr.on(
-                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
+                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change, lora_dropdown.change],
                         fn=self.load_inpaint,
-                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown],
+                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, lora_dropdown],
                         outputs=generate_button
                     )
 
@@ -207,19 +233,19 @@ class StableDiffusionApp:
                         inputs=None,
                         outputs=[output_image]
                     )
-                    
-                    generate_button.click(
+                    click_event= generate_button.click(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim],
+                        inputs=[controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength],
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
-                    clear_button.click(fn=lambda: None, inputs=[], outputs=output_image)
-                    upscalefour.click(fn=upscale, inputs=output_image, outputs=output_image)
+                    clear_button.click(fn=hide, inputs=None, outputs=output_image)
+    
+                    #upscalefour.click(fn=upscale, inputs=output_image, outputs=output_image)
 
                     custom_dimensions.change(fn=toggle_dimensions, inputs=[custom_dimensions], outputs=[width, height])
 
-                # # Text-to-Image Tab
+                # Text-to-Image Tab
                 # with gr.TabItem("Text-to-Image"):
                 #     with gr.Row():
                 #         txt2img_prompt = gr.Textbox(label="Prompt", placeholder="Enter your prompt here...", lines=4)
@@ -229,8 +255,8 @@ class StableDiffusionApp:
                 #         txt2img_width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512)
                 #         txt2img_height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=768)
                 #         txt2img_seed = gr.Number(label="Seed", value=-1)
-                #         txt2img_steps = gr.Number(label="Number of Steps", value=25)
-                #         txt2img_cfg_scale = gr.Number(label="CFG Scale", value=7)
+                #         txt2img_steps = gr.Slider(label="Number of Steps", value=25, maximum=50, minimum=1,step=1)
+                #         txt2img_cfg_scale = gr.Slider(label="CFG Scale", value=7, minimum=0, maximum=20, step=0.1)
                 #         txt2img_clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2, 3], value=0)
 
                 #     # Dropdown for selecting text-to-image model
@@ -245,9 +271,12 @@ class StableDiffusionApp:
 
                 #     txt2img_clear_button = gr.Button("Clear Image")
                 #     txt2img_clear_button.click(fn=lambda: None, inputs=[], outputs=txt2img_output_image)
+                    
+                #     # Listeners
+                #     # txt2img_model_dropdown.change
 
                 #     txt2img_generate_button.click(
-                #         fn=self.generate_and_load_txt2img_image,
+                #         fn=self.seed_and_gen_txt2img_image,
                 #         inputs=[txt2img_model_dropdown, txt2img_prompt, txt2img_negative_prompt, txt2img_width, txt2img_height, txt2img_seed, txt2img_steps, txt2img_cfg_scale, txt2img_clip_skip],
                 #         outputs=txt2img_output_image
                 #     )
@@ -255,12 +284,13 @@ class StableDiffusionApp:
 
                                 
                 with gr.TabItem("PNG Info"):
-                    with gr.Row(equal_height=True):
+                    with gr.Row():
                         png_input_image = gr.Image(type="pil", label="Input Image")
                         with gr.Column():
-                            png_info = gr.Textbox(label="Generation Parameters",lines=10, show_copy_button=True,show_label=True)
-                            with gr.Row():
-                                info_to_inpaint_btn = gr.Button("Send Parameters to Inpaint Tab",visible=False)                                 
+                            png_info = gr.Textbox(label="Generation Parameters",lines=25, show_copy_button=True,show_label=True)
+                            with gr.Row(equal_height=True):
+                                info_to_inpaint_btn = gr.Button("Send Parameters to Inpaint Tab",visible=False)    
+                                state= gr.State(value=0)                            
                         
                     def get_metadata(image):
                         if image is None:
@@ -290,6 +320,44 @@ class StableDiffusionApp:
                         
                         return parameters
 
+
+
+                    def load_info_to_inpaint(info):
+                        # Extract metadata
+                        parameters = extract_metadata(info)
+                        background_path = parameters.get("output_path")
+                        background = Image.open(background_path)
+                        
+                        # Return updates for each component based on the parsed parameters
+                        return (
+                            parameters.get("model/checkpoint", "stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
+                            parameters.get("scheduler", "DPMSolverMultistepScheduler"),
+                            parameters.get("controlnet", "None"),
+                            parameters.get("controlnet_strength", 1.0),
+                            parameters.get("seed", -1), 
+                            background,
+                            parameters.get("prompt", ""),             
+                            parameters.get("negative_prompt", ""),        
+                            int(parameters.get("width", 512)),              
+                            int(parameters.get("height", 768)),            
+                            int(parameters.get("steps", 25)),   
+                            float(parameters.get("mask_blur", 0)),       
+                            float(parameters.get("cfg_scale", 7.0)),     
+                            int(parameters.get("clip_skip", 0)),             
+                            parameters.get("fill_setting", "Inpaint Masked"),  
+                            parameters.get("maintain_aspect_ratio", "True") == "True", 
+                            parameters.get("post_process", "True") == "True",  
+                            parameters.get("custom_dimensions", "True") == "True",  
+                            float(parameters.get("denoise_strength", 1.0)),  
+                            int(parameters.get("batch_size", 1)),
+                            parameters.get("mode", "Inpaint"),
+                            parameters.get("image_positioned_at", "Center"),
+                            parameters.get("maximum_width/height", 768),
+                            1
+                        )
+                        
+                        
+                        
                     def load_mask_to_inpaint(info):
                         # Extract metadata
                         parameters = extract_metadata(info)
@@ -323,39 +391,7 @@ class StableDiffusionApp:
                             "background": background,
                             "layers": layers,
                             "composite": composite
-                        }
-
-                    def load_info_to_inpaint(info):
-                        # Extract metadata
-                        parameters = extract_metadata(info)
-                        background_path = parameters.get("output_path")
-                        background = Image.open(background_path)
-                        
-                        # Return updates for each component based on the parsed parameters
-                        return (
-                            parameters.get("model/checkpoint", "stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
-                            parameters.get("scheduler", "DPMSolverMultistepScheduler"),
-                            parameters.get("controlnet", "None"),
-                            parameters.get("seed", -1), 
-                            background,
-                            parameters.get("prompt", ""),             
-                            parameters.get("negative_prompt", ""),        
-                            int(parameters.get("width", 512)),              
-                            int(parameters.get("height", 768)),            
-                            int(parameters.get("steps", 25)),   
-                            float(parameters.get("mask_blur", 0)),       
-                            float(parameters.get("cfg_scale", 7.0)),     
-                            int(parameters.get("clip_skip", 0)),             
-                            parameters.get("fill_setting", "Inpaint Masked"),  
-                            parameters.get("maintain_aspect_ratio", "True") == "True", 
-                            parameters.get("post_process", "True") == "True",  
-                            parameters.get("custom_dimensions", "True") == "True",  
-                            float(parameters.get("denoise_strength", 1.0)),  
-                            int(parameters.get("batch_size", 1)),
-                            parameters.get("mode", "Inpaint"),
-                            parameters.get("image_positioned_at", "Center"),
-                            parameters.get("maximum_width/height", 768)
-                        )
+                        }, 0
                                                
                     #Listeners
                     png_input_image.change(fn=make_visible,inputs=None,outputs=[info_to_inpaint_btn])
@@ -369,6 +405,7 @@ class StableDiffusionApp:
                         inpainting_checkpoint_dropdown,
                         scheduler_dropdown,
                         controlnet_dropdown,
+                        controlnet_strength,
                         seed,
                         inpaint_input_image,
                         prompt,  
@@ -388,12 +425,13 @@ class StableDiffusionApp:
                         mode,
                         outpaint_img_pos,
                         outpaint_max_dim,
+                        state
                     ])
                     
-                    info_to_inpaint_btn.click(
+                    state.change(
                         fn=load_mask_to_inpaint,
                         inputs=png_info,
-                        outputs=inpaint_mask
+                        outputs=[inpaint_mask,state]
                     )
                                        
                 # Image Upscale Tab
@@ -423,14 +461,14 @@ class StableDiffusionApp:
 
         iface.queue().launch(share= not is_local)
          
-    def load_inpaint(self, checkpoint, scheduler, controlnet):
+    def load_inpaint(self, checkpoint, scheduler, controlnet, lora):
         """Load the pipeline based on changes in the checkpoint or ControlNet selection."""
 
         # Load pipeline with the determined parameters
-        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet)
+        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet, lora_name=lora)
         return gr.update(interactive=True, value="Generate Image")
     
-    def seed_and_gen_inpaint_image( self, controlnet_name, seed, *args, progress=gr.Progress(track_tqdm=True)):
+    def seed_and_gen_inpaint_image( self, controlnet_name, seed, *args):
         """Generate an inpainted image after loading the appropriate model."""
           
         if seed is None or seed == "" or seed == -1:
@@ -446,7 +484,7 @@ class StableDiffusionApp:
             self.pipeline_manager, controlnet_name, seed, generator,
             *args) 
         
-       
+    
 # Main execution
 if __name__ == "__main__":
     

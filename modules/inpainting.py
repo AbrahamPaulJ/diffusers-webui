@@ -61,16 +61,20 @@ def retrieve_mask(mode = "Inpaint", outpaint_img_pos= "Center", image= None):
         return final_image  # Return the combined image for Outpaint mode
 
 
-
-
-
 def use_brush(image):
-
     print("use_brush function was accessed.")
     layers = image["layers"]
-    brush_mask = layers[0] 
+    brush_mask = layers[0]
+
     # Convert brush_mask to a numpy array
     brush_mask = np.array(brush_mask)
+
+    # Check if brush_mask is empty or has no drawing
+    if np.all(brush_mask == 0):  # Assuming 0 means no drawing (black/transparent)
+        # Create a black RGBA background with the same size
+        final_mask = Image.new("RGB", (brush_mask.shape[1], brush_mask.shape[0]), "BLACK")
+        return final_mask
+
     # Create a white RGBA background
     white_background = Image.new("RGBA", brush_mask.shape[1::-1], "WHITE")
     # Convert brush_mask to PIL Image
@@ -94,7 +98,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim):
+def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -191,7 +195,9 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         control_image = create_control_image(input_image, controlnet)
         if is_local:
             control_image.save("controlimg.png")
+        controlnet_strength = controlnet_strength
         pipe_kwargs["control_image"] = control_image
+        pipe_kwargs["controlnet_strength"] = controlnet_strength
       
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
@@ -224,21 +230,22 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     # Save the first image with its generation metadata
     
     first_output_image = processed_images[0]
-    
-    if mode=="Inpaint":
+    s
+    if mode == "Inpaint":
         full_mask = full_mask["layers"][0]
-        output_directory = "outputs/inpaint_masks"
+        output_directory = os.path.join("outputs", "inpaint_masks")  # Cross-platform path
         # Ensure the output directory exists
         os.makedirs(output_directory, exist_ok=True)
         # Save the first image with its generation metadata
         mask_name = f"mask_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
         mask_path = os.path.join(output_directory, mask_name)
         full_mask.save(mask_path)
-     
-    output_directory = "outputs/inpaint"   
+
+    directory = "inpaint" if mode=="Inpaint" else "outpaint"
+    output_directory = os.path.join("outputs", directory)  # Cross-platform path for inpaint output
     output_name = f"output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
     output_path = os.path.join(output_directory, output_name)
-    
+        
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
     #metadata.add_text("generator", str(generator))
@@ -246,6 +253,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
     metadata.add_text("controlnet", str(controlnet_name))
+    metadata.add_text("controlnet_strength", str(controlnet_strength))
     metadata.add_text("seed", str(seed))
     metadata.add_text("prompt", prompt)
     metadata.add_text("negative_prompt", negative_prompt)
@@ -521,6 +529,8 @@ def create_composite(background: Image.Image, layer: Image.Image) -> Image.Image
     composite.paste(layer, (0, 0), layer)  # Use layer as its own mask to handle transparency
     
     return composite    
+
+
 
 
 
