@@ -70,7 +70,7 @@ class StableDiffusionApp:
                         loras_folder = "loras"
                         choices = [file for file in os.listdir(loras_folder) if file.endswith(".safetensors")]
                         loras_visible = True if not choices else False
-                        default_value = choices[0]
+                        default_value = choices[0] if choices else None
 
                         lora_dropdown = gr.Dropdown(
                             label="Select LoRA",
