@@ -1,13 +1,16 @@
 # modules/inpainting.py
 
-import torch
+from modules import is_local
 from modules.pipelines import PipelineManager
-from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
-import numpy as np
+from modules.image_processes import *
+
 from datetime import datetime
 import os
 import time
-from modules import is_local
+from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
+import numpy as np
+
+
 
 def retrieve_mask(mode = "Inpaint", outpaint_img_pos= "Center", image= None):
     if image is None:
@@ -187,6 +190,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         "mask_image": 1.0 - mask_image, 
         "image": input_image,
     }
+    
 
     # Add control_image to the keyword arguments if ControlNet is used
     controlnet = pipeline_manager.active_controlnet
@@ -197,7 +201,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
             control_image.save("controlimg.png")
         controlnet_strength = controlnet_strength
         pipe_kwargs["control_image"] = control_image
-        pipe_kwargs["controlnet_strength"] = controlnet_strength
+        pipe_kwargs["controlnet_strength"] = controlnet_strength       
       
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
@@ -230,7 +234,7 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     # Save the first image with its generation metadata
     
     first_output_image = processed_images[0]
-    s
+    
     if mode == "Inpaint":
         full_mask = full_mask["layers"][0]
         output_directory = os.path.join("outputs", "inpaint_masks")  # Cross-platform path
@@ -242,7 +246,9 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         full_mask.save(mask_path)
 
     directory = "inpaint" if mode=="Inpaint" else "outpaint"
-    output_directory = os.path.join("outputs", directory)  # Cross-platform path for inpaint output
+    output_directory = os.path.join("outputs", directory) 
+    # Ensure the output directory exists
+    os.makedirs(output_directory, exist_ok=True)
     output_name = f"output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
     output_path = os.path.join(output_directory, output_name)
         
@@ -279,11 +285,6 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         metadata.add_text("image_positioned_at", str(outpaint_img_pos))
         metadata.add_text("maximum_width/height", str(outpaint_max_dim))    
         
-    
-    output_directory = "outputs/inpaint" if mode == "Inpaint" else "outputs/outpaint"
-    # Ensure the output directory exists
-    os.makedirs(output_directory, exist_ok=True)
-
     # Save the first image with its generation metadata
     first_output_image.save(output_path, pnginfo=metadata)
     
@@ -455,53 +456,7 @@ import torch
 from torchvision import transforms
 from PIL import Image
 
-def create_control_image(input_image, controlnet_type):
-    """Generate control images for ControlNet (canny, depth, etc.) based on controlnet_type."""
-    
-    # Convert input_image to grayscale if needed for certain operations
-    if isinstance(input_image, Image.Image):
-        input_image_np = np.array(input_image.convert("RGB"))
-    else:
-        print("Error: input_image is not a PIL Image.")
-        return None
 
-    control_image = None
-    controlnet_type = controlnet_type.lower()  # Normalize for case-insensitive matching
-    print(f"ControlNet type: {controlnet_type}")  # Debugging
-
-    # Process based on the controlnet type
-    if "canny" in controlnet_type:
-        # Convert the image to grayscale for edge detection
-        gray_image = cv2.cvtColor(input_image_np, cv2.COLOR_RGB2GRAY)
-        print("Applying Canny edge detection...")  # Debugging
-        # Apply canny edge detection
-        control_image = cv2.Canny(gray_image, 100, 200)
-        control_image = Image.fromarray(control_image)
-        return control_image  # Return after canny to prevent overwrites
-
-    if "depth" in controlnet_type:
-        print("Applying Depth estimation...")  # Debugging
-        from transformers import pipeline
-        depth_estimator = pipeline('depth-estimation', device=0 if torch.cuda.is_available() else "cpu")
-        image = depth_estimator(input_image)['depth']
-        image = np.array(image)
-        image = image[:, :, None]
-        image = np.concatenate([image, image, image], axis=2)
-        control_image = Image.fromarray(image)
-        return control_image
-
-    if "openpose" in controlnet_type:
-        print("Applying OpenPose detection...")  # Debugging
-        from controlnet_aux import OpenposeDetector
-        processor = OpenposeDetector.from_pretrained('lllyasviel/ControlNet')
-        control_image = processor(input_image, hand_and_face=True)
-        return control_image
-
-    # Resize control_image to match input dimensions
-    if control_image and (control_image.size != input_image.size):
-        control_image = control_image.resize(input_image.size, Image.BILINEAR)
-
-    return control_image
 
 def remove_background(image: Image.Image, threshold: int = 200) -> Image.Image:
     image = image.convert("RGBA")

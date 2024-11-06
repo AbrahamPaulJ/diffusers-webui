@@ -1,7 +1,7 @@
 import diffusers.schedulers
 from diffusers import (
     StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline,
-    StableDiffusionPipeline, ControlNetModel
+    StableDiffusionPipeline, StableDiffusionControlNetPipeline, ControlNetModel
 )
 import torch
 import os
@@ -26,22 +26,23 @@ class PipelineManager:
         self.controlnet_model = None
         self.active_controlnet = None  # To track ControlNet type
         self.active_lora = None
+        self.active_pipeline_type = None  # Track active pipeline type
 
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                  pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
-                  controlnet_type: str = "None", lora_name: str = None):  # New parameter for LoRA
+                      pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
+                      controlnet_type: str = "None", lora_name: str = None):  # New parameter for LoRA
         """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
-    
+        
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
-
         controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
-                                (controlnet_type != "None" and current_control_net_type == "None")                            
+                             (controlnet_type != "None" and current_control_net_type == "None")                            
 
         # Reload if a new checkpoint or ControlNet type is specified
-        if (checkpoint_name != self.active_checkpoint) or controlnet_changed:
+        if (checkpoint_name != self.active_checkpoint) or controlnet_changed or (pipeline_type != self.active_pipeline_type):
             if self.active_pipe is not None:
                 del self.active_pipe
-                torch.cuda.empty_cache() if device == "cuda" else None
+                if device == "cuda":
+                    torch.cuda.empty_cache() 
                 print(f"Previous checkpoint {self.active_checkpoint} unloaded.")
 
             try:
@@ -49,6 +50,7 @@ class PipelineManager:
                 pipeline_classes = {
                     ('inpainting', True): StableDiffusionControlNetInpaintPipeline,
                     ('inpainting', False): StableDiffusionInpaintPipeline,
+                    ('txt2img', True): StableDiffusionControlNetPipeline,
                     ('txt2img', False): StableDiffusionPipeline,
                 }
                 
@@ -60,22 +62,24 @@ class PipelineManager:
 
                 # Load the pipeline from the model or checkpoint
                 load_method = pipeline_class.from_single_file if checkpoint_name.endswith((".ckpt", ".safetensors")) else pipeline_class.from_pretrained
-                print(load_method)
                 print(f"Loading checkpoint from: {checkpoint_name}")
                 
                 pipe = load_method(
                     os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
-                    controlnet=self.controlnet_model if is_controlnet else None,
                     torch_dtype=torch_dtype,
                     safety_checker=None,
-                    requires_safety_checker=IN_COLAB,  #True in colab env
+                    requires_safety_checker=IN_COLAB,  # True in colab env
                     cache_dir=self.model_dir
                 )
+
+                if is_controlnet:
+                    pipe.controlnet = self.controlnet_model 
                 
                 # Move the pipeline to GPU if available.
                 self.active_pipe = pipe.to(device)
                 print(f"Using device: {device}")
                 self.active_checkpoint = checkpoint_name
+                self.active_pipeline_type = pipeline_type  # Update active pipeline type
 
                 print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRA: {lora_name})")
 
@@ -88,10 +92,10 @@ class PipelineManager:
         self.update_controlnet(controlnet_type)
 
         # Update Scheduler dynamically
-        self.update_scheduler(scheduler, controlnet_changed)
+        self.update_scheduler(scheduler)
         
         # Update the LoRA if a name is provided
-        self.update_lora(lora_name, controlnet_changed)
+        self.update_lora(lora_name)
         
         if device == "cuda":
             self.active_pipe.enable_model_cpu_offload()
@@ -129,14 +133,14 @@ class PipelineManager:
                     traceback.print_exc()
                     self.controlnet_model = None
 
-        # Update pipeline's ControlNet setting
-        if self.active_pipe:
-            self.active_pipe.controlnet = self.controlnet_model
+            # Update pipeline's ControlNet setting
+            if self.active_pipe:
+                self.active_pipe.controlnet = self.controlnet_model
             
-    def update_scheduler(self, scheduler: str, controlnet_changed):
+    def update_scheduler(self, scheduler: str):
         """Change the scheduler dynamically without reloading the pipeline."""
         # Check if the scheduler is different from the active one or if controlnet has changed
-        if scheduler != self.active_scheduler or controlnet_changed:
+        if scheduler != self.active_scheduler:
             try:
                 scheduler_class = getattr(diffusers.schedulers, scheduler)
 
@@ -160,12 +164,12 @@ class PipelineManager:
                 print(f"Error setting scheduler {scheduler}: {e}")
                 traceback.print_exc()
 
-    def update_lora(self, lora_name: str, controlnet_changed):
+    def update_lora(self, lora_name: str):
         """Update the LoRA weights if a name is provided, handling controlnet changes if necessary."""
         if lora_name:
             lora_path = os.path.join("loras", lora_name)  # Construct full path to the LoRA model
 
-            if self.active_lora != lora_name or controlnet_changed:  # Check if the LoRA or controlnet changed
+            if self.active_lora != lora_name:  # Check if the LoRA or controlnet changed
                 if self.active_pipe is not None:
                     # Load the LoRA weights
                     self.active_pipe.load_lora_weights(lora_path)
