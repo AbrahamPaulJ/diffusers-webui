@@ -32,7 +32,6 @@ class PipelineManager:
                   controlnet_type: str = "None", lora_name: str = None):  # New parameter for LoRA
         """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
     
-        # Handle None case for self.control_net_type to avoid AttributeError
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
 
         controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
