@@ -2,7 +2,7 @@
 
 from modules import is_local
 from modules.pipelines import PipelineManager
-from modules.image_processes import *
+from modules.image_processing import create_control_image
 
 from datetime import datetime
 import os
@@ -19,23 +19,34 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, denoise_strength, batch_size, controlnet_strength):
+def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength):
     """Generate an image from text prompt using the loaded pipeline."""
 
     pipe = pipeline_manager.active_pipe
+    compel = pipeline_manager.compel
     
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
+    
+    conditioning = compel.build_conditioning_tensor(prompt)
+    negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
+    [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
+
+    print(con_embeds.size())
+    print(neg_embeds.size())
+    
+    width, height = int(width), int(height)
 
     pipe_kwargs = {
     "num_images_per_prompt": batch_size,
-    "prompt": prompt,
-    "negative_prompt": negative_prompt,
+    # "prompt": prompt,
+    # "negative_prompt": negative_prompt,
+    "prompt_embeds":con_embeds,
+    "negative_prompt_embeds":neg_embeds,
     "generator": generator,
     "width": width,
     "height": height,
     "num_inference_steps": steps,
-    "strength": denoise_strength,
     "guidance_scale": cfg_scale,
     "clip_skip": clip_skip
 }
@@ -52,8 +63,8 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
         pipe_kwargs["controlnet_strength"] = controlnet_strength
       
     # Print types for debugging
-    for key, value in pipe_kwargs.items():
-        print(f"{key}: Type = {type(value)}, Value = {value}")
+    # for key, value in pipe_kwargs.items():
+    #     print(f"{key}: Type = {type(value)}, Value = {value}")
 
     generated_images = pipe(**pipe_kwargs).images
     
@@ -81,7 +92,6 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("cfg_scale", str(cfg_scale))
     metadata.add_text("clip_skip", str(clip_skip))
     metadata.add_text("output_path", output_path)
-    metadata.add_text("denoise_strength", str(denoise_strength))
     metadata.add_text("batch_size", str(batch_size))
 
     # Save the first image with its generation metadata

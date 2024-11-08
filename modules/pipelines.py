@@ -1,13 +1,14 @@
-import diffusers.schedulers
 from diffusers import (
     StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline,
     StableDiffusionPipeline, StableDiffusionControlNetPipeline, ControlNetModel
 )
+from compel import Compel
+
 import torch
 import os
 import traceback
 import importlib.util
-from modules import IN_COLAB
+from modules import IN_COLAB, SCHEDULERS
 
 if IN_COLAB:
     print("Colab environment detected: Safety checker enabled.")
@@ -25,20 +26,26 @@ class PipelineManager:
         self.active_scheduler = None
         self.controlnet_model = None
         self.active_controlnet = None  # To track ControlNet type
-        self.active_lora = None
+        self.active_lora_dict = None
         self.active_pipeline_type = None  # Track active pipeline type
-
-    def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                      pipeline_type: str = "inpainting", scheduler: str = "DPMSolverMultistepScheduler", 
-                      controlnet_type: str = "None", lora_name: str = None):  # New parameter for LoRA
-        """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
+        self.compel=None
         
+    def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
+                      pipeline_type: str = "inpainting", scheduler: str = "DPM++_2M_KARRAS", 
+                      controlnet_type: str = "None", use_lora: bool = False, lora_paths_weights: dict = None):  # New parameter for LoRA
+        """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
+             
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
-        controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
-                             (controlnet_type != "None" and current_control_net_type == "None")                            
-
+        
+        inpaint_controlnet_changed = (
+            (controlnet_type == "None" and current_control_net_type != "None") or 
+            (controlnet_type != "None" and current_control_net_type == "None")
+            ) and pipeline_type != "inpainting"
+                                                  
+        pipe_reload_condition = (checkpoint_name != self.active_checkpoint) or inpaint_controlnet_changed or (pipeline_type != self.active_pipeline_type)
+        
         # Reload if a new checkpoint or ControlNet type is specified
-        if (checkpoint_name != self.active_checkpoint) or controlnet_changed or (pipeline_type != self.active_pipeline_type):
+        if pipe_reload_condition:
             if self.active_pipe is not None:
                 del self.active_pipe
                 if device == "cuda":
@@ -67,21 +74,24 @@ class PipelineManager:
                 pipe = load_method(
                     os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
                     torch_dtype=torch_dtype,
+                    controlnet= self.controlnet_model,
                     safety_checker=None,
                     requires_safety_checker=IN_COLAB,  # True in colab env
                     cache_dir=self.model_dir
                 )
-
-                if is_controlnet:
-                    pipe.controlnet = self.controlnet_model 
+                self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, truncate_long_prompts=False)
                 
                 # Move the pipeline to GPU if available.
                 self.active_pipe = pipe.to(device)
                 print(f"Using device: {device}")
+                
+                if device == "cuda" and has_xformers:
+                    self.active_pipe.enable_xformers_memory_efficient_attention()
+                          
                 self.active_checkpoint = checkpoint_name
                 self.active_pipeline_type = pipeline_type  # Update active pipeline type
-
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRA: {lora_name})")
+                
+                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_paths_weights})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
@@ -92,16 +102,13 @@ class PipelineManager:
         self.update_controlnet(controlnet_type)
 
         # Update Scheduler dynamically
-        self.update_scheduler(scheduler)
+        self.update_scheduler(scheduler, pipe_reload_condition)
         
-        # Update the LoRA if a name is provided
-        self.update_lora(lora_name)
-        
+        self.update_lora(pipe_reload_condition, use_lora, lora_paths_weights)
+            
         if device == "cuda":
             self.active_pipe.enable_model_cpu_offload()
-            if has_xformers:
-                self.active_pipe.enable_xformers_memory_efficient_attention()
-
+            
             current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
             print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
 
@@ -137,13 +144,16 @@ class PipelineManager:
             if self.active_pipe:
                 self.active_pipe.controlnet = self.controlnet_model
             
-    def update_scheduler(self, scheduler: str):
+    def update_scheduler(self, scheduler: str, pipe_reload_condition):
         """Change the scheduler dynamically without reloading the pipeline."""
         # Check if the scheduler is different from the active one or if controlnet has changed
-        if scheduler != self.active_scheduler:
+        if scheduler != self.active_scheduler or pipe_reload_condition:
             try:
-                scheduler_class = getattr(diffusers.schedulers, scheduler)
-
+                # Retrieve the scheduler class from the SCHEDULERS dictionary using the short name
+                scheduler_class = SCHEDULERS.get(scheduler)
+                if not scheduler_class:
+                    raise ValueError(f"Scheduler '{scheduler}' not found in SCHEDULERS dictionary.")
+                
                 # Load the scheduler based on checkpoint type
                 if not self.active_checkpoint.endswith((".ckpt", ".safetensors")):
                     # Use pretrained scheduler for regular models
@@ -155,7 +165,7 @@ class PipelineManager:
                 else:
                     # For ckpt or safetensor models, initialize scheduler from config
                     self.active_pipe.scheduler = scheduler_class.from_config(self.active_pipe.scheduler.config)
-
+                
                 # Update the active scheduler to avoid redundant reloads
                 self.active_scheduler = scheduler
                 print(f"Scheduler updated to: {scheduler}")
@@ -164,20 +174,60 @@ class PipelineManager:
                 print(f"Error setting scheduler {scheduler}: {e}")
                 traceback.print_exc()
 
-    def update_lora(self, lora_name: str):
-        """Update the LoRA weights if a name is provided, handling controlnet changes if necessary."""
-        if lora_name:
-            lora_path = os.path.join("loras", lora_name)  # Construct full path to the LoRA model
 
-            if self.active_lora != lora_name:  # Check if the LoRA or controlnet changed
-                if self.active_pipe is not None:
-                    # Load the LoRA weights
-                    self.active_pipe.load_lora_weights(lora_path)
-                    print(f"Loaded LoRA weights from: {lora_path}")
-                self.active_lora = lora_name  # Update active LoRA
-            else:
-                print(f"LoRA weights already loaded: {self.active_lora}")
+    def update_lora(self, pipe_reload_condition, use_lora, lora_dict, lora_adapter_names=[], lora_scales=[], fuse_scale=1.0):
+        """Update the LoRA weights with scaling factors for multiple LoRAs."""
+        
+        # Construct lora_dirs from lora_names
+        
+        if (use_lora and (lora_dict!= self.active_lora_dict or pipe_reload_condition)): 
+            self.active_pipe.unload_lora_weights()
+            lora_paths = list(lora_dict.keys())
+            lora_scales = list(lora_dict.values())
+            # Ensure there are enough adapter names for the LoRAs
+            if len(lora_adapter_names) < len(lora_paths):
+                # Create adapter names based on filenames
+                adapters = [os.path.splitext(os.path.basename(p))[0] for p in lora_paths[len(lora_adapter_names):]]
+                adapters = [a.replace(".", "_") for a in adapters]  # Replace '.' with '_' for safe variable names
+                lora_adapter_names += adapters
+            # Debug: Print the lora_adapter_names after ensuring they are set correctly
+            print("lora_adapter_names:", lora_adapter_names)
+
+            # Ensure there are enough scales for the LoRAs
+            if len(lora_scales) < len(lora_paths):
+                lora_scales += [1.0] * (len(lora_paths) - len(lora_scales))
+
+            # Debug: Print the lora_scales to check if scales are set correctly
+            print("lora_scales:", lora_scales)
+
+            # Load each LoRA weight and associate with the correct adapter name
+            for lp, la in zip(lora_paths, lora_adapter_names):
+                try:
+                    print(f"Loading LoRA weights from: {lp} with adapter name: {la}")
+                    self.active_pipe.load_lora_weights(lp, adapter_name=la)  # Load LoRA with the adapter name
+                except Exception as e:
+                    print(f"Error loading LoRA weight {lp}: {e}")
+
+            # Set the adapters and their respective scales
+            try:
+                print("Setting adapters...")
+                self.active_pipe.set_adapters(lora_adapter_names, adapter_weights=lora_scales)
+
+                # Fuse the LoRAs with the given scale
+                print(f"Fusing LoRAs with scale {fuse_scale}...")
+                self.active_pipe.fuse_lora(adapter_names=lora_adapter_names, lora_scale=fuse_scale)
+                self.active_lora_dict = lora_dict
+            except Exception as e:
+                print(f"Error setting adapters or fusing LoRAs: {e}")
+
+            print("LoRAs loaded and fused.")  
+            
+
         else:
-            print("No LoRA selected.")
-            self.active_lora = None  # Reset active LoRA if none is provided
+            if not use_lora:
+            # Unload LoRA weights if not using LoRA
+                if self.active_pipe is not None:
+                    self.active_pipe.unload_lora_weights()
+                    # print("No LoRA weights.")
+                self.active_lora_dict = None  # Reset active LoRA if none is provided
 

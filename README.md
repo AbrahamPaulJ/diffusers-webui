@@ -30,7 +30,7 @@ python app.py
 
 # Features
 
-- Inpainting tab: This tab allows image inpainting and outpaintin with the parameters detailed in 
+- Inpainting tab: Allows inpainting and outpainting with the API:
 [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint).
 
     - Implemented features:
@@ -39,19 +39,22 @@ python app.py
         
         - Gaussian Blur Slider: For applying blur to the mask edges.
         
-        - Post-Processing Option: Preserves non-masked areas during processing.
+        - Post-Processing Option: Retains original non-masked areas after image generation. 
 
         - Outpaint Mode: Outpainting is done using the inpaint pipeline, where the a black background canvas is used as a mask.       
               
-              - The transform tool allows cropping of the image placed on the black canvas, 
-              which makes outpainting in any direction easy.
+            - The transform tool allows cropping of the image placed on the black canvas, 
+            which makes outpainting in any direction easy.
 
-              - You can choose where to place the image on the canvas using the 
-              "Image Positioned at:" option.
+            - You can choose where to place the image on the canvas using the 
+            "Image Positioned at:" option.
 
-              - You can control output size by choosing "Maximum Width/Height".
+            - You can control output size by choosing "Maximum Width/Height".
 
-- Image Upscale tab: Includes ESRGAN upscaling options.
+- Text to Image tab: Generates images from prompts using the API:
+[StableDiffusionPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/text2img).
+
+<!-- - Image Upscale tab: Includes ESRGAN upscaling options. -->
 
 - PNG Info tab: For previously generated images, featuring a view of the generation
  parameters and a "Send Parameters to Inpaint Tab" option.
@@ -64,4 +67,6 @@ python app.py
 
 # Notes
 
-- To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically if installed.
+- Ensure you have the correct version of Pytorch and CUDA supported by your device, this is necessary for enabling GPU for inference.
+
+- To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically once installed.

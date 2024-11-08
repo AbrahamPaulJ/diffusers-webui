@@ -2,94 +2,13 @@
 
 from modules import is_local
 from modules.pipelines import PipelineManager
-from modules.image_processes import *
+from modules.image_processing import *
 
 from datetime import datetime
 import os
 import time
-from PIL import Image, ImageOps, PngImagePlugin, ImageFilter
+from PIL import Image, PngImagePlugin, ImageFilter
 import numpy as np
-
-
-
-def retrieve_mask(mode = "Inpaint", outpaint_img_pos= "Center", image= None):
-    if image is None:
-        # Return a blank image if there's no input image
-        return Image.new("RGBA", (520, 520), (0, 0, 0, 0))
-
-    if mode == "Inpaint":
-        # For Inpaint mode, check if height exceeds 450px
-        width, height = image.size
-        if height > 450:
-            # Calculate the scaling factor to maintain aspect ratio
-            scale_factor = 450 / height
-            new_width = int(width * scale_factor)
-            new_height = 450
-            # Resize the image with the new dimensions
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        return image  # Return resized image for Inpaint mode
-
-    elif mode == "Outpaint":
-        # For Outpaint mode, resize the image so that the larger side is 200
-        width, height = image.size
-        if width > height:
-            scale_factor = 200 / width
-            new_width = 200
-            new_height = int(height * scale_factor)
-        else:
-            scale_factor = 200 / height
-            new_height = 200
-            new_width = int(width * scale_factor)
-
-        # Resize the image
-        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        # Create a black image of 500x500
-        final_image = Image.new("RGBA", (500, 500), (0, 0, 0, 255))
-
-        # Calculate offsets based on `outpaint_img_pos`
-        if outpaint_img_pos == "Center":
-            x_offset = (500 - new_width) // 2
-            y_offset = (500 - new_height) // 2
-        elif outpaint_img_pos == "Top":
-            x_offset = (500 - new_width) // 2
-            y_offset = 0  # Align to top center
-        elif outpaint_img_pos == "Bottom":
-            x_offset = (500 - new_width) // 2
-            y_offset = 500 - new_height  # Align to bottom center
-
-        # Paste the resized image onto the black background at the calculated position
-        final_image.paste(image, (x_offset, y_offset))
-
-        return final_image  # Return the combined image for Outpaint mode
-
-
-def use_brush(image):
-    print("use_brush function was accessed.")
-    layers = image["layers"]
-    brush_mask = layers[0]
-
-    # Convert brush_mask to a numpy array
-    brush_mask = np.array(brush_mask)
-
-    # Check if brush_mask is empty or has no drawing
-    if np.all(brush_mask == 0):  # Assuming 0 means no drawing (black/transparent)
-        # Create a black RGBA background with the same size
-        final_mask = Image.new("RGB", (brush_mask.shape[1], brush_mask.shape[0]), "BLACK")
-        return final_mask
-
-    # Create a white RGBA background
-    white_background = Image.new("RGBA", brush_mask.shape[1::-1], "WHITE")
-    # Convert brush_mask to PIL Image
-    brush_mask_image = Image.fromarray(brush_mask)
-    # Paste the brush mask onto the white background
-    white_background.paste(brush_mask_image, (0, 0), brush_mask_image)
-    # Convert the result to RGB and save as final_mask
-    final_mask = white_background.convert('RGB')
-    return final_mask
-
-def use_crop(image):
-    return image["background"]
 
 def time_execution(fn):
     def wrapper(*args, **kwargs):
@@ -101,19 +20,22 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, custom_dimensions, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength):
+def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
+    
+    
+
     
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
      
     if mode=="Inpaint":
         width, height = int(width), int(height)
-        if not custom_dimensions:
-            width, height = auto_select_dimensions(input_image)
-            print(f"Target dimensions are {height}x{width}")
+        # if not custom_dimensions:
+        #     width, height = auto_select_dimensions(input_image)
+        #     print(f"Target dimensions are {height}x{width}")
                  
         full_mask = inpaint_mask
         inpaint_mask = use_brush(inpaint_mask)
@@ -254,7 +176,6 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
-    #metadata.add_text("generator", str(generator))
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
@@ -270,14 +191,11 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("cfg_scale", str(cfg_scale))
     metadata.add_text("clip_skip", str(clip_skip))
     metadata.add_text("mode", str(mode))
-    #metadata.add_text("inpaint_mask", str(inpaint_mask))
     if mode=="Inpaint":
         metadata.add_text("output_path", output_path)
         metadata.add_text("mask_path", mask_path)
         metadata.add_text("fill_setting", str(fill_setting))
         metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
-        metadata.add_text("custom_dimensions", str(custom_dimensions))
-    #metadata.add_text("segment_type", segment_type)
     metadata.add_text("post_process", str(post_process))
     metadata.add_text("denoise_strength", str(denoise_strength))
     metadata.add_text("batch_size", str(batch_size))
@@ -285,7 +203,6 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
         metadata.add_text("image_positioned_at", str(outpaint_img_pos))
         metadata.add_text("maximum_width/height", str(outpaint_max_dim))    
         
-    # Save the first image with its generation metadata
     first_output_image.save(output_path, pnginfo=metadata)
     
     if is_local:
@@ -294,196 +211,6 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     return processed_images  # Return as a list of images for Gradio's Gallery    
     
 
-def add_padding(image, target_width, target_height, pad_color=None):
-    """Resize and pad image to target dimensions while maintaining aspect ratio."""
-    
-    # Check if image is empty
-    if image is None or image.size == (0, 0):
-        raise ValueError("Input image is empty or not valid.")
-
-    img_width, img_height = image.size
-    print(f"Original image size: {img_width}x{img_height}")  # Debugging line
-    target_aspect_ratio = target_width / target_height
-    current_aspect_ratio = img_width / img_height
-
-    # Calculate new dimensions and padding
-    if current_aspect_ratio > target_aspect_ratio:
-        new_width = target_width
-        new_height = int(target_width / current_aspect_ratio)
-    else:
-        new_height = target_height
-        new_width = int(target_height * current_aspect_ratio)
-
-    # Resize the image to fit within the target dimensions
-    image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    # Check the new image size after resizing
-    print(f"Resized image size (before padding): {image.size}")  # Debugging line
-    new_img_width, new_img_height = image.size
-
-    # Calculate padding to reach target dimensions
-    padding = (
-        (target_width - new_img_width) // 2,  # Left padding
-        (target_height - new_img_height) // 2,  # Top padding
-        (target_width - new_img_width + 1) // 2,  # Right padding
-        (target_height - new_img_height + 1) // 2   # Bottom padding
-    )
-
-    # If no padding color is specified, calculate from edges of the image
-    if pad_color is None:
-        # Ensure the image has dimensions for edge color calculations
-        if new_img_width > 0 and new_img_height > 0:
-            # Get edge colors if the image has valid dimensions
-            left_color = image.getpixel((0, new_img_height // 2))  # Left edge
-            right_color = image.getpixel((new_img_width - 1, new_img_height // 2))  # Right edge
-            top_color = image.getpixel((new_img_width // 2, 0))  # Top edge
-            bottom_color = image.getpixel((new_img_width // 2, new_img_height - 1))  # Bottom edge
-            
-            edge_colors = [left_color, right_color, top_color, bottom_color]
-            pad_color = tuple(sum(c) // len(c) for c in zip(*edge_colors))
-        else:
-            pad_color = (128, 128, 128)  # Default color if image is too small
-
-    # Ensure the pad_color is appropriate for the image mode
-    return ImageOps.expand(image, padding, pad_color)
-
-def auto_select_dimensions(image, target_sizes=[512, 768, 1024]):
-    # Get the original dimensions of the image
-    original_width, original_height = image.size
-    
-    # Calculate the aspect ratio
-    aspect_ratio = original_width / original_height
-
-    # Determine the closest target size for width and height
-    if aspect_ratio > 1:  # Landscape
-        target_width = min(target_sizes, key=lambda x: abs(x - original_width))
-        target_height = int(target_width / aspect_ratio)
-    else:  # Portrait or Square
-        target_height = min(target_sizes, key=lambda x: abs(x - original_height))
-        target_width = int(target_height * aspect_ratio)
-
-    # Round the width and height to the nearest target size
-    target_width = min(target_sizes, key=lambda x: abs(x - target_width))
-    target_height = min(target_sizes, key=lambda x: abs(x - target_height))
-
-    return target_width, target_height
-
-def resize_to_max_side(image, target_size=1024):
-    """
-    Resizes the image so that the larger side becomes `target_size` (e.g., 1024),
-    maintaining the aspect ratio.
-
-    Args:
-        image (PIL.Image): The input image.
-        target_size (int): The target size for the larger dimension.
-
-    Returns:
-        PIL.Image: The resized image with the larger side set to `target_size`.
-    """
-    width, height = image.size
-    
-    # Determine scale factor to make the larger side equal to target_size
-    if width > height:
-        scale_factor = target_size / width
-    else:
-        scale_factor = target_size / height
-
-    # Calculate new dimensions and resize the image
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    return resized_image
-
-def get_inner_dimensions(image):
-    # Convert the image to grayscale and then to binary (black/white)
-    gray_image = image.convert("L")  # Convert to grayscale
-    binary_mask = gray_image.point(lambda p: p > 0 and 255)  # Create a binary mask
-
-    # Find the bounding box of the non-black areas
-    bbox = binary_mask.getbbox()  # Returns (left, upper, right, lower)
-
-    if bbox is None:
-        return None  # No non-black pixels found
-
-    # Calculate the width and height based on the bounding box
-    inner_width = bbox[2] - bbox[0]  # right - left
-    inner_height = bbox[3] - bbox[1]  # lower - upper
-    print(f"Inner dimensions are: {inner_width} x {inner_height}.")
-    return inner_width, inner_height
-
-def get_bounding_box_sides(outpaint_mask):
-    # Convert the image to grayscale and create a binary mask to isolate non-black areas
-    gray_image = outpaint_mask.convert("L")  # Convert to grayscale
-    binary_mask = gray_image.point(lambda p: p > 0 and 255)  # Convert to binary (black/white)
-
-    # Get the bounding box of the non-black region
-    bbox = binary_mask.getbbox()  # Returns (left, upper, right, lower)
-    
-    if bbox is not None:
-        # Calculate the lengths of each side of the bounding box
-        left_side = bbox[0]
-        right_side = outpaint_mask.width - bbox[2]
-        top_side = bbox[1]
-        bottom_side = outpaint_mask.height - bbox[3]
-
-        # Print the results
-        # print(f"Left side: {left_side} pixels")
-        # print(f"Right side: {right_side} pixels")
-        # print(f"Top side: {top_side} pixels")
-        # print(f"Bottom side: {bottom_side} pixels")
-        
-        # Return the side lengths as a tuple
-        return (left_side, right_side, top_side, bottom_side)
-    else:
-        print("No non-black region found.")
-        return (0, 0, 0, 0)  # Return zeros if no non-black region is found
-
-def resize_to_nearest_multiple_of_8(image):
-    # Get the current dimensions of the image
-    width, height = image.size
-    
-    # Calculate the nearest dimensions that are multiples of 8
-    new_width = (width + 7) // 8 * 8
-    new_height = (height + 7) // 8 * 8
-
-    # Resize the image to these dimensions
-    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    return resized_image
-
-import cv2
-import torch
-from torchvision import transforms
-from PIL import Image
-
-
-
-def remove_background(image: Image.Image, threshold: int = 200) -> Image.Image:
-    image = image.convert("RGBA")
-    data = image.getdata()
-    new_data = []
-    for item in data:
-        avg = sum(item[:3]) / 3
-        if avg > threshold:
-            new_data.append((0, 0, 0, 0))  # Make white pixels transparent
-        else:
-            new_data.append(item)  # Keep other colors
-
-    image.putdata(new_data)
-    return image
-
-def create_composite(background: Image.Image, layer: Image.Image) -> Image.Image:
-    # Ensure both images are in RGBA mode to handle transparency
-    background = background.convert("RGBA")
-    layer = layer.convert("RGBA")
-    
-    # Create a copy of the background to avoid modifying the original
-    composite = background.copy()
-    
-    # Paste the layer onto the background
-    composite.paste(layer, (0, 0), layer)  # Use layer as its own mask to handle transparency
-    
-    return composite    
 
 
 

@@ -11,6 +11,8 @@ outputs/
 stable-diffusion-webui/
 .gradio/
 tests/
+
+#Ignnore files
 test.py
 test2.py
 controlimg.png
@@ -19,6 +21,8 @@ outpaintmaskimg.png
 outpaintinputimg.png
 outputimg1.png
 upscaled_image.jpg
+outputtxt2img.png
+modules/compel_alternative.py
 
 
 # Byte-compiled / optimized / DLL files
