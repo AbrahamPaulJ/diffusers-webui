@@ -2,18 +2,17 @@ from diffusers import (
     StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline,
     StableDiffusionPipeline, StableDiffusionControlNetPipeline, ControlNetModel
 )
-from compel import Compel
+from compel import Compel, DiffusersTextualInversionManager
 
 import torch
 import os
 import traceback
 import importlib.util
-from modules import IN_COLAB, SCHEDULERS
+from modules import IN_COLAB, SCHEDULERS, device, flush
 
 if IN_COLAB:
     print("Colab environment detected: Safety checker enabled.")
     
-device = "cuda" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if device == "cuda" else torch.float32
 has_xformers = importlib.util.find_spec("xformers") is not None
 print(f"xformers available: {has_xformers}")
@@ -32,24 +31,21 @@ class PipelineManager:
         
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
                       pipeline_type: str = "inpainting", scheduler: str = "DPM++_2M_KARRAS", 
-                      controlnet_type: str = "None", use_lora: bool = False, lora_paths_weights: dict = None):  # New parameter for LoRA
+                      controlnet_type: str = "None", use_lora: bool = False, lora_dict: dict = None):  # New parameter for LoRA
         """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
              
         current_control_net_type = self.active_controlnet if self.active_controlnet is not None else "None"
-        
-        inpaint_controlnet_changed = (
-            (controlnet_type == "None" and current_control_net_type != "None") or 
-            (controlnet_type != "None" and current_control_net_type == "None")
-            ) and pipeline_type != "inpainting"
+
+        controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
+                                (controlnet_type != "None" and current_control_net_type == "None")
                                                   
-        pipe_reload_condition = (checkpoint_name != self.active_checkpoint) or inpaint_controlnet_changed or (pipeline_type != self.active_pipeline_type)
+        pipe_reload_condition = (checkpoint_name != self.active_checkpoint) or controlnet_changed or (pipeline_type != self.active_pipeline_type) or (self.active_lora_dict!=lora_dict)
         
         # Reload if a new checkpoint or ControlNet type is specified
         if pipe_reload_condition:
             if self.active_pipe is not None:
                 del self.active_pipe
-                if device == "cuda":
-                    torch.cuda.empty_cache() 
+                flush()
                 print(f"Previous checkpoint {self.active_checkpoint} unloaded.")
 
             try:
@@ -79,8 +75,9 @@ class PipelineManager:
                     requires_safety_checker=IN_COLAB,  # True in colab env
                     cache_dir=self.model_dir
                 )
-                self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, truncate_long_prompts=False)
-                
+                textual_inversion_manager = DiffusersTextualInversionManager(pipe)
+                self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,textual_inversion_manager=textual_inversion_manager, truncate_long_prompts=False)
+                                
                 # Move the pipeline to GPU if available.
                 self.active_pipe = pipe.to(device)
                 print(f"Using device: {device}")
@@ -91,7 +88,7 @@ class PipelineManager:
                 self.active_checkpoint = checkpoint_name
                 self.active_pipeline_type = pipeline_type  # Update active pipeline type
                 
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_paths_weights})")
+                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
@@ -104,7 +101,7 @@ class PipelineManager:
         # Update Scheduler dynamically
         self.update_scheduler(scheduler, pipe_reload_condition)
         
-        self.update_lora(pipe_reload_condition, use_lora, lora_paths_weights)
+        self.update_lora(use_lora, lora_dict)
             
         if device == "cuda":
             self.active_pipe.enable_model_cpu_offload()
@@ -175,12 +172,12 @@ class PipelineManager:
                 traceback.print_exc()
 
 
-    def update_lora(self, pipe_reload_condition, use_lora, lora_dict, lora_adapter_names=[], lora_scales=[], fuse_scale=1.0):
+    def update_lora(self, use_lora, lora_dict, lora_adapter_names=[], lora_scales=[], fuse_scale=1.0):
         """Update the LoRA weights with scaling factors for multiple LoRAs."""
         
         # Construct lora_dirs from lora_names
         
-        if (use_lora and (lora_dict!= self.active_lora_dict or pipe_reload_condition)): 
+        if (use_lora and (lora_dict!= self.active_lora_dict)): 
             self.active_pipe.unload_lora_weights()
             lora_paths = list(lora_dict.keys())
             lora_scales = list(lora_dict.values())

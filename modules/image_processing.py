@@ -57,7 +57,7 @@ def retrieve_mask(mode = "Inpaint", outpaint_img_pos= "Center", image= None):
 
 
 def use_brush(image):
-    print("use_brush function was accessed.")
+    # print("use_brush function was accessed.")
     layers = image["layers"]
     brush_mask = layers[0]
 

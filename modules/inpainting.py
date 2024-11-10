@@ -1,6 +1,6 @@
 # modules/inpainting.py
 
-from modules import is_local
+from modules import is_local, load_embeddings_for_prompt
 from modules.pipelines import PipelineManager
 from modules.image_processing import *
 
@@ -20,16 +20,23 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength):
+def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
     
-    
-
-    
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
+    
+    compel = pipeline_manager.compel
+    
+    # Cache to track already loaded embeddings
+    load_embeddings_for_prompt(pipe, prompt, negative_prompt=negative_prompt)
+    
+    conditioning = compel.build_conditioning_tensor(prompt)
+    negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
+    [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
+    
      
     if mode=="Inpaint":
         width, height = int(width), int(height)
@@ -100,8 +107,10 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     # Prepare the keyword arguments for the pipeline
     pipe_kwargs = {
         "num_images_per_prompt": batch_size,
-        "prompt": prompt,
-        "negative_prompt": negative_prompt,
+        # "prompt": prompt,
+        # "negative_prompt": negative_prompt,
+        "prompt_embeds":con_embeds,
+        "negative_prompt_embeds":neg_embeds,
         "generator": generator,
         "width": width,
         "height": height,
@@ -201,7 +210,11 @@ def generate_inpaint_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("batch_size", str(batch_size))
     if mode=="Outpaint":
         metadata.add_text("image_positioned_at", str(outpaint_img_pos))
-        metadata.add_text("maximum_width/height", str(outpaint_max_dim))    
+        metadata.add_text("maximum_width/height", str(outpaint_max_dim))  
+    if use_lora:
+        metadata.add_text("use_lora", str(use_lora))
+        metadata.add_text("loras_used", ",".join(lora_dropdown)) 
+        metadata.add_text("lora_weights",str(lora_prompt))  
         
     first_output_image.save(output_path, pnginfo=metadata)
     

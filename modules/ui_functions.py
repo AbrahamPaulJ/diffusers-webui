@@ -45,11 +45,20 @@ def reset_seed():
 def random_seed():
     return random.randint(0, 2**32 - 1)
 
+def recycle_seed(output_seed):
+    return output_seed
+
 def auto_dim(image):
     if image is not None:
         return auto_select_dimensions(image)
     else:
         return 512,512
+    
+def upload_control_img(controlnet_dropdown):
+    if controlnet_dropdown!="None":
+        return gr.update(visible=True),gr.update(visible=True)
+    else:
+        return gr.update(visible=False),gr.update(visible=False)
     
 def update_lora_dropdown():
     loras_folder = "loras"
@@ -91,6 +100,8 @@ def lora_to_prompt_cb(checkbox, lora_list):
         return ", ".join(lora_prompt_list)
     
                       
+import os
+
 def get_metadata(image):
     if image is None:
         return "No metadata available.", gr.update(visible=False), gr.update(visible=False)
@@ -99,17 +110,22 @@ def get_metadata(image):
     metadata = image.info  # Metadata dictionary for PNG images in PIL
     if not metadata:
         return "No metadata found in this image.", gr.update(visible=False), gr.update(visible=False)
+
+    # print("Metadata extracted:", metadata)  # Debug print to check the metadata
+
     parameters_string = "\n".join([f"{k}: {v}" for k, v in metadata.items()])
     parameters = extract_metadata(parameters_string)
+    # print("Extracted parameters:", parameters)  # Debug print to check the parameters
+    
     output_path = parameters.get("output_path")
     if output_path:
-        output_path.replace("\\", "/")
-    # print(output_path)
-    # print(output_path.startswith("outputs\txt2img"))
-    txt2img_btn_visible =True if (output_path and output_path.startswith("outputs/txt2img")) else False
+        output_path = output_path.replace("\\", "/")  # Assign back to output_path
+    # print("Output Path:", output_path)  # Check the output path
+    
+    txt2img_btn_visible = True if (output_path and output_path.startswith("outputs/txt2img")) else False
 
-    # Format metadata for display
     return "\n".join([f"{k}: {v}" for k, v in metadata.items()]), gr.update(visible=not txt2img_btn_visible), gr.update(visible=txt2img_btn_visible)
+
 
 
 def extract_metadata(info):
@@ -132,6 +148,11 @@ def extract_metadata(info):
 def load_info_to_inpaint(info,state):
     # Extract metadata
     parameters = extract_metadata(info)
+    
+    loras_used = parameters.get("loras_used", "")
+    lora_list = loras_used.split(",") if loras_used else []
+    lora_weights = parameters.get("lora_weights", "")
+    
     background_path = parameters.get("output_path")
     background = Image.open(background_path)
     state^= 1
@@ -161,48 +182,38 @@ def load_info_to_inpaint(info,state):
         parameters.get("mode", "Inpaint"),
         parameters.get("image_positioned_at", "Center"),
         parameters.get("maximum_width/height", 768),
+        parameters.get("use_lora", "False") == "True",
+        lora_list,
+        lora_weights,
         state
     )
     
 def load_info_to_txt2img(info):
     # Extract metadata
     parameters = extract_metadata(info)
-    
-    # Debug print statements for parameter values and their types
-    print("Debugging Parameters and Types:")
-    print(f"Checkpoint: {parameters.get('model/checkpoint', 'stablediffusionapi/realistic-vision-v6.0-b1-inpaint')} (Type: {type(parameters.get('model/checkpoint', 'stablediffusionapi/realistic-vision-v6.0-b1-inpaint'))})")
-    print(f"Scheduler: {parameters.get('scheduler', 'DPMSolverMultistepScheduler')} (Type: {type(parameters.get('scheduler', 'DPMSolverMultistepScheduler'))})")
-    print(f"ControlNet: {parameters.get('controlnet', 'None')} (Type: {type(parameters.get('controlnet', 'None'))})")
-    print(f"ControlNet Strength: {parameters.get('controlnet_strength', 1.0)} (Type: {type(parameters.get('controlnet_strength', 1.0))})")
-    print(f"Seed: {parameters.get('seed', -1)} (Type: {type(parameters.get('seed', -1))})")
-    print(f"Prompt: {parameters.get('prompt', '')} (Type: {type(parameters.get('prompt', ''))})")
-    print(f"Negative Prompt: {parameters.get('negative_prompt', '')} (Type: {type(parameters.get('negative_prompt', ''))})")
-    print(f"Width: {parameters.get('width', 512)} (Type: {type(parameters.get('width', 512))})")
-    print(f"Height: {parameters.get('height', 768)} (Type: {type(parameters.get('height', 768))})")
-    print(f"Steps: {parameters.get('steps', 25)} (Type: {type(parameters.get('steps', 25))})")
-    print(f"CFG Scale: {parameters.get('cfg_scale', 7.0)} (Type: {type(parameters.get('cfg_scale', 7.0))})")
-    print(f"Clip Skip: {parameters.get('clip_skip', 1)} (Type: {type(parameters.get('clip_skip', 1))})")
-    print(f"Batch Size: {parameters.get('batch_size', 1)} (Type: {type(parameters.get('batch_size', 1))})")
-    
-    # Return updates for each component based on the parsed parameters
+    loras_used = parameters.get("loras_used", "")
+    lora_list = loras_used.split(",") if loras_used else []
+    lora_weights = parameters.get("lora_weights", "")
+
     return (
-        parameters.get("model/checkpoint", "stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
-        parameters.get("scheduler", "DPMSolverMultistepScheduler"),
+        parameters.get("model/checkpoint", "runwayml/stable-diffusion-v1-5"),
+        parameters.get("scheduler", "DPM++_2M_KARRAS"),
         parameters.get("controlnet", "None"),
-        parameters.get("controlnet_strength", 1.0),
+        float(parameters.get("controlnet_strength", 1.0)),
         parameters.get("seed", -1), 
         parameters.get("prompt", ""),             
         parameters.get("negative_prompt", ""),        
-        int(parameters.get("width", 512)),              
-        int(parameters.get("height", 768)),            
+        parameters.get("width", 512),              
+        parameters.get("height", 512),            
         int(parameters.get("steps", 25)),      
         float(parameters.get("cfg_scale", 7.0)),     
         int(parameters.get("clip_skip", 1)),               
         int(parameters.get("batch_size", 1)),
+        parameters.get("hires_fix_2x", "False") == "True",
+        parameters.get("use_lora", "False") == "True",
+        lora_list,
+        lora_weights  # Return lora_weights
     )
-
-    
-    
     
 def load_mask_to_inpaint(info):
     # Extract metadata

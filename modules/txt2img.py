@@ -1,8 +1,9 @@
 # modules/txt2img.py
 
-from modules import is_local
+from modules import is_local, load_embeddings_for_prompt, flush, loaded_embeddings
 from modules.pipelines import PipelineManager
 from modules.image_processing import create_control_image
+
 
 from datetime import datetime
 import os
@@ -19,21 +20,24 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength):
+def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength, hires_fix, use_lora, lora_dropdown, lora_prompt):
     """Generate an image from text prompt using the loaded pipeline."""
 
     pipe = pipeline_manager.active_pipe
-    compel = pipeline_manager.compel
-    
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
+
+    compel = pipeline_manager.compel
+    
+    # Cache to track already loaded embeddings
+    load_embeddings_for_prompt(pipe, prompt, negative_prompt=negative_prompt)
+    
+    
+    print(f"Using embeddings: {loaded_embeddings}")
     
     conditioning = compel.build_conditioning_tensor(prompt)
     negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
     [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
-
-    print(con_embeds.size())
-    print(neg_embeds.size())
     
     width, height = int(width), int(height)
 
@@ -56,6 +60,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     
     if controlnet != None:
         control_image = create_control_image(control_input, controlnet)
+        print(type(control_image))
         if is_local:
             control_image.save("controlimg.png")
         controlnet_strength = controlnet_strength
@@ -93,7 +98,69 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("clip_skip", str(clip_skip))
     metadata.add_text("output_path", output_path)
     metadata.add_text("batch_size", str(batch_size))
+    metadata.add_text("hires_fix_2x", str(hires_fix))
+    if use_lora:
+        metadata.add_text("use_lora", str(use_lora))
+        metadata.add_text("loras_used", ",".join(lora_dropdown)) 
+        metadata.add_text("lora_weights",str(lora_prompt))
 
+    if hires_fix: 
+        
+        from diffusers import StableDiffusionImg2ImgPipeline
+        from diffusers.models.attention_processor import AttnProcessor2_0
+        from RealESRGAN import RealESRGAN
+        import torch
+        from PIL import Image
+         
+        i2ipipe = StableDiffusionImg2ImgPipeline(**pipe.components)
+
+        pipe.enable_vae_tiling()
+
+        pipe.unet.set_attn_processor(AttnProcessor2_0())
+
+        i2ipipe.enable_vae_tiling()
+
+        i2ipipe.unet.set_attn_processor(AttnProcessor2_0())
+        
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        model = RealESRGAN(device, scale=4)
+        model.load_weights('models\RealESRGAN_x4.pth', download=False)
+        print("Upscaling...")
+        sr_image = model.predict(first_output_image)  
+        print("Upscaled")
+        
+        flush()
+        
+        scaled_img = sr_image.resize((2*width,2*height), Image.BILINEAR)
+        
+        i2i_pipe_kwargs = {
+            "image": scaled_img,
+            "prompt_embeds": con_embeds,
+            "negative_prompt_embeds": neg_embeds,
+            "generator": generator,
+            "width": 2*width,
+            "height": 2*height,
+            "num_inference_steps": steps,
+            "guidance_scale": 1,
+            "clip_skip": 2,
+            "strength": 0.3
+    }
+        print("Applying hires .fix...")
+        generated_images = i2ipipe(**i2i_pipe_kwargs).images
+        print("hires .fix applied successfully.")
+             
+        del i2ipipe
+        if device == "cuda":
+            torch.cuda.empty_cache() 
+            
+        generated_images[0].save(output_path, pnginfo=metadata)
+        
+        if is_local:
+            first_output_image.save("outputtxt2img.png")
+            
+        return generated_images
+    
     # Save the first image with its generation metadata
     first_output_image.save(output_path, pnginfo=metadata)
     

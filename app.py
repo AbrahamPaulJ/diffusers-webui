@@ -3,7 +3,7 @@
 import gradio as gr
 from modules.inpainting import *
 from modules.txt2img import *
-from modules.upscale import upscale
+# from modules.upscale import upscale
 from modules.manage_models import model_dir
 from modules.pipelines import PipelineManager
 from torch import Generator
@@ -18,7 +18,7 @@ class StableDiffusionApp:
         self.model_dir = model_dir
         self.pipeline_manager = PipelineManager(model_dir)
         # Load the default inpainting pipeline
-        self.pipeline_manager.load_pipeline()
+        #self.pipeline_manager.load_pipeline()
         self.setup_gradio_interface()
 
     def setup_gradio_interface(self):
@@ -53,12 +53,21 @@ class StableDiffusionApp:
                     brush = gr.Brush(colors=["#000000"], color_mode='fixed',default_size=50)
                     load_status = gr.State(value=0)
                     
+                    os.makedirs("models", exist_ok=True)
+                    models_folder = "models"
+                    model_choices = [
+                        file.replace("models--", "", 1).replace("--", "/", 1) if file.startswith("models--") and "control" not in file.lower() 
+                        else file
+                        for file in os.listdir(models_folder)
+                        if (file.endswith((".safetensors", ".ckpt")) or 
+                            (os.path.isdir(os.path.join(models_folder, file)) and "control" not in file.lower()))
+                    ]
+                    
                     with gr.Row(equal_height=True):
                         # Dropdown for selecting inpainting checkpoint
                         inpainting_checkpoint_dropdown = gr.Dropdown(
                             label="Select Inpaint Checkpoint", 
-                            choices=["runwayml/stable-diffusion-inpainting","stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                                     "ponyRealism_V22MainVAE.safetensors", "runwayml/stable-diffusion-v1-5", "sd-v1-5-inpainting.ckpt"], 
+                            choices = model_choices, 
                             value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint"
                         )
                             
@@ -77,15 +86,15 @@ class StableDiffusionApp:
                         
                         os.makedirs("loras", exist_ok=True)
                         loras_folder = "loras"
-                        choices = [file for file in os.listdir(loras_folder) if file.endswith(".safetensors")]
-                        lora_default_value = choices[0] if choices else None
+                        lora_choices = [file for file in os.listdir(loras_folder) if file.endswith(".safetensors")]
+                        lora_default_value = lora_choices[0] if lora_choices else None
                         
                         with gr.Column():
                             use_lora = gr.Checkbox(label="Use LoRAs", value=False)
                             
                             lora_dropdown = gr.Dropdown(
                                 label="Select LoRAs",
-                                choices=choices if choices else [],
+                                choices=lora_choices if lora_choices else [],
                                 value=lora_default_value,
                                 visible=False,
                                 multiselect=True
@@ -130,7 +139,7 @@ class StableDiffusionApp:
                             clear_button = gr.Button("Clear Image")
                             batch_size = gr.Slider(label="Batch Size", minimum=1, maximum=8, value=1, step=1)
                             #upscalefour = gr.Button("Upscale to 4x")
-                            output_seed = gr.Textbox(value=None, label="Output Seed", interactive=False, show_copy_button=True,show_label=True, visible=False)
+                            output_seed = gr.Textbox(value=-1, label="Output Seed", interactive=False, show_copy_button=True,show_label=True, visible=False)
 
                     with gr.Row(equal_height=True):
                         with gr.Column():
@@ -142,8 +151,10 @@ class StableDiffusionApp:
                         with gr.Group():
                             seed = gr.Number(label="Seed", value=-1)
                             with gr.Column():
-                                reset_seed_btn = gr.Button("🔄", size='lg')
+                                reset_seed_btn = gr.Button("↺", size='lg')
                                 random_seed_btn = gr.Button("🎲", size='lg')
+                                reuse_seed_btn = gr.Button("♻️", size='lg')
+                                
                         clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2], value=1)
 
    
@@ -180,6 +191,7 @@ class StableDiffusionApp:
 
                     reset_seed_btn.click(fn=reset_seed, outputs=seed)
                     random_seed_btn.click(fn=random_seed, outputs=seed)
+                    reuse_seed_btn.click(fn=recycle_seed,inputs=output_seed, outputs=seed)
                     
                     generate_button.click(
                         fn=generating,
@@ -213,7 +225,7 @@ class StableDiffusionApp:
                                                                    
                     load_status.change(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength],
+                        inputs=[controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
@@ -234,7 +246,7 @@ class StableDiffusionApp:
                         # Dropdown for selecting text-to-image model
                         txt2img_checkpoint_dropdown = gr.Dropdown(
                             label="Select Text-to-Image Model", 
-                            choices=["CheckpointYesmix_v16Original.safetensors" if is_local else "runwayml/stable-diffusion-v1-5"], 
+                            choices = model_choices, 
                             value="runwayml/stable-diffusion-v1-5",
                         )
                         # Dropdown for selecting scheduler
@@ -253,7 +265,7 @@ class StableDiffusionApp:
                             
                             txt2img_lora_dropdown = gr.Dropdown(
                                 label="Select LoRAs",
-                                choices=choices if choices else [],
+                                choices=lora_choices if lora_choices else [],
                                 value=lora_default_value,
                                 visible=False,
                                 multiselect=True
@@ -267,12 +279,13 @@ class StableDiffusionApp:
                                 with gr.Row():
                                     txt2img_steps = gr.Slider(label="Number of Steps", value=25, maximum=50, minimum=1,step=1)
                                     txt2img_cfg_scale = gr.Slider(label="CFG Scale", value=7, minimum=0, maximum=20, step=0.5)
+                                    txt2img_hires_fix = gr.Checkbox(label="Hires. fix - Latent 2x", value=False)
                                 with gr.Row(equal_height=True):
                                     with gr.Group():
-                                        txt2img_seed = gr.Number(label="Seed", value=-1)
-                                        with gr.Column():
-                                            txt2img_reset_seed_btn = gr.Button("🔄", size='lg')
+                                            txt2img_seed = gr.Number(label="Seed", value=-1)                                   
+                                            txt2img_reset_seed_btn = gr.Button("↺", size='lg')
                                             txt2img_random_seed_btn = gr.Button("🎲", size='lg')
+                                            txt2img_reuse_seed_btn = gr.Button("♻️", size='lg')
                                     with gr.Column():        
                                         txt2img_clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2], value=1)
                                         txt2img_batch_size = gr.Slider(label="Batch Size", minimum=1, maximum=8, value=1, step=1)
@@ -284,7 +297,7 @@ class StableDiffusionApp:
                                             choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
                                             value="None"
                                         )
-                                    txt2img_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01)
+                                    txt2img_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01, visible=False)
                                     
                                 
                                     
@@ -299,15 +312,8 @@ class StableDiffusionApp:
                                 txt2img_generate_button = gr.Button("Generate Image")
                                 txt2img_clear_button = gr.Button("Clear Image")
                             with gr.Row(): 
-                                txt2img_output_seed = gr.Textbox(value=None, label="Output Seed", interactive=False, show_copy_button=True,show_label=True, visible=False)   
+                                txt2img_output_seed = gr.Textbox(value=-1, label="Output Seed", interactive=False, show_copy_button=True,show_label=True, visible=False)   
                             txt2img_negative_prompt = gr.Textbox(label="Negative Prompt", placeholder="Enter negative prompt here...", lines=8)
-                                                   
-                    # Functions
-                    def upload_control_img(value):
-                        if value!="None":
-                            return gr.update(visible=True)
-                        else:
-                            return gr.update(visible=False)
                             
 
                     # Listeners
@@ -327,6 +333,7 @@ class StableDiffusionApp:
 
                     txt2img_reset_seed_btn.click(fn=reset_seed, outputs=txt2img_seed)
                     txt2img_random_seed_btn.click(fn=random_seed, outputs=txt2img_seed)
+                    txt2img_reuse_seed_btn.click(fn=recycle_seed,inputs=txt2img_output_seed, outputs=txt2img_seed)
                     
                     txt2img_generate_button.click(
                         fn=clear_gallery,
@@ -347,6 +354,12 @@ class StableDiffusionApp:
                     )
                     
                     txt2img_generate_button.click(
+                        fn=make_visible,
+                        inputs=None,
+                        outputs=[txt2img_output_image]
+                    )
+                    
+                    txt2img_generate_button.click(
                         fn=self.load_and_seed_gen_txt2img,
                         inputs=[txt2img_load_status, txt2img_checkpoint_dropdown, txt2img_scheduler_dropdown, txt2img_controlnet_dropdown, txt2img_use_lora, txt2img_lora_prompt],
                         outputs=[txt2img_load_status]
@@ -354,11 +367,11 @@ class StableDiffusionApp:
                                                                    
                     txt2img_load_status.change(
                         fn=self.seed_and_gen_tx2img_image,
-                         inputs=[txt2img_controlnet_dropdown, txt2img_seed, txt2img_prompt, txt2img_negative_prompt, txt2img_width, txt2img_height, txt2img_steps, txt2img_cfg_scale, txt2img_clip_skip,txt2img_control_image, txt2img_batch_size, txt2img_controlnet_strength],
+                         inputs=[txt2img_controlnet_dropdown, txt2img_seed, txt2img_prompt, txt2img_negative_prompt, txt2img_width, txt2img_height, txt2img_steps, txt2img_cfg_scale, txt2img_clip_skip,txt2img_control_image, txt2img_batch_size, txt2img_controlnet_strength, txt2img_hires_fix, txt2img_use_lora, txt2img_lora_dropdown, txt2img_lora_prompt],
                          outputs=[txt2img_generate_button, txt2img_output_seed, txt2img_output_image]
                     )
                     
-                    txt2img_controlnet_dropdown.change(fn=upload_control_img,inputs=txt2img_controlnet_dropdown,outputs=txt2img_control_image)
+                    txt2img_controlnet_dropdown.change(fn=upload_control_img,inputs=txt2img_controlnet_dropdown,outputs=[txt2img_control_image,txt2img_controlnet_strength])
                     txt2img_use_lora.change(fn=using_lora, inputs=txt2img_use_lora, outputs=[txt2img_lora_dropdown,txt2img_lora_prompt])
                     txt2img_use_lora.change(fn=lora_to_prompt_cb,inputs=[txt2img_steps,txt2img_lora_dropdown],outputs=txt2img_lora_prompt)
                     txt2img_lora_dropdown.change(fn=lora_to_prompt, inputs=txt2img_lora_dropdown,outputs=txt2img_lora_prompt)
@@ -366,14 +379,13 @@ class StableDiffusionApp:
                 
                 with gr.TabItem("PNG Info"):
                     with gr.Row():
-                        png_input_image = gr.Image(type="pil", label="Input Image")
+                        png_input_image = gr.Image(type="pil", label="Input Image", height=600)
                         with gr.Column():
                             png_info = gr.Textbox(label="Generation Parameters",lines=25, show_copy_button=True,show_label=True)
                             with gr.Row(equal_height=True):
                                 info_to_inpaint_btn = gr.Button("Send Parameters to Inpaint Tab",visible=False)   
                                 info_to_txt2img_btn = gr.Button("Send Parameters to Text to Image Tab",visible=False)  
                                 state= gr.State(value=0)                            
-  
                                                
                     #Listeners
                     png_input_image.change(fn=get_metadata, inputs=png_input_image, outputs=[png_info, info_to_inpaint_btn, info_to_txt2img_btn])
@@ -404,6 +416,9 @@ class StableDiffusionApp:
                         mode,
                         outpaint_img_pos,
                         outpaint_max_dim,
+                        use_lora,
+                        lora_dropdown,
+                        lora_prompt,
                         state
                     ])
                     
@@ -423,7 +438,11 @@ class StableDiffusionApp:
                         txt2img_steps, 
                         txt2img_cfg_scale,  
                         txt2img_clip_skip, 
-                        txt2img_batch_size
+                        txt2img_batch_size,
+                        txt2img_hires_fix,
+                        txt2img_use_lora,
+                        txt2img_lora_dropdown,
+                        txt2img_lora_prompt
                     ])
                     
                     
@@ -466,7 +485,7 @@ class StableDiffusionApp:
         if generate_button_clicked==False:
             lora_dict = self.parse_lora_prompt(lora_dict)
         # Load pipeline with the determined parameters
-        self.pipeline_manager.load_pipeline(checkpoint, "txt2img", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_paths_weights=lora_dict)
+        self.pipeline_manager.load_pipeline(checkpoint, "txt2img", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_dict=lora_dict)
         return gr.update(interactive=True, value="Generate Image") if generate_button_clicked is False else gr.update(interactive=False, value="Generating...")
     
     def load_and_seed_gen_txt2img(self, load_status, checkpoint, scheduler, controlnet, use_lora, lora_prompt):
@@ -500,7 +519,7 @@ class StableDiffusionApp:
         if generate_button_clicked==False:
             lora_dict = self.parse_lora_prompt(lora_dict)
         # Load pipeline with the determined parameters
-        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_paths_weights=lora_dict)
+        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_dict=lora_dict)
         return gr.update(interactive=True, value="Generate Image") if generate_button_clicked is False else gr.update(interactive=False, value="Generating...")
     
     def load_and_seed_gen_inpaint(self, load_status, checkpoint, scheduler, controlnet, use_lora, lora_prompt):
