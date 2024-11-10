@@ -41,6 +41,10 @@ python app.py
         
         - Post-Processing Option: Retains original non-masked areas after image generation. 
 
+        -ControlNet support: Canny, Depth and Openpose.
+
+        - Support for multiple LoRA and embedding files (textual inversion).
+
         - Outpaint Mode: Outpainting is done using the inpaint pipeline, where the a black background canvas is used as a mask.       
               
             - The transform tool allows cropping of the image placed on the black canvas, 
@@ -50,9 +54,16 @@ python app.py
             "Image Positioned at:" option.
 
             - You can control output size by choosing "Maximum Width/Height".
+        
 
 - Text to Image tab: Generates images from prompts using the API:
 [StableDiffusionPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/text2img).
+
+    - Implemented features:
+
+    - Hi-Res .fix - 2x latent
+
+    - Support for multiple LoRA and embedding files (textual inversion).
 
 <!-- - Image Upscale tab: Includes ESRGAN upscaling options. -->
 
@@ -66,6 +77,8 @@ python app.py
 ![Screenshot](images/outpaint.png)
 
 # Notes
+
+- Prompt format: To add prompt weighting, please use [Compel Prompt Syntax](https://github.com/damian0815/compel/blob/main/Reference.md)
 
 - Ensure you have the correct version of Pytorch and CUDA supported by your device, this is necessary for enabling GPU for inference.
 

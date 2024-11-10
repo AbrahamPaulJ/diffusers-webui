@@ -7,6 +7,7 @@
 .env
 models/
 loras/
+embeddings/
 outputs/
 stable-diffusion-webui/
 .gradio/
@@ -23,6 +24,7 @@ outputimg1.png
 upscaled_image.jpg
 outputtxt2img.png
 modules/compel_alternative.py
+t2i_hires.png
 
 
 # Byte-compiled / optimized / DLL files
