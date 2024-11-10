@@ -41,7 +41,7 @@ python app.py
         
         - Post-Processing Option: Retains original non-masked areas after image generation. 
 
-        -ControlNet support: Canny, Depth and Openpose.
+        - ControlNet support: Canny, Depth and Openpose.
 
         - Support for multiple LoRA and embedding files (textual inversion).
 
@@ -61,9 +61,9 @@ python app.py
 
     - Implemented features:
 
-    - Hi-Res .fix - 2x latent
+        - Hi-Res .fix - 2x latent
 
-    - Support for multiple LoRA and embedding files (textual inversion).
+        - Support for multiple LoRA and embedding files (textual inversion).
 
 <!-- - Image Upscale tab: Includes ESRGAN upscaling options. -->
 
