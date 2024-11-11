@@ -76,7 +76,7 @@ class PipelineManager:
                 # Move the pipeline to GPU if available.
                 self.active_pipe = pipe
                 if vram < 7:
-                    print(f"VAE tiling enabled. RAM :{vram}")
+                    print(f"VAE tiling enabled.")
                     self.active_pipe.enable_vae_tiling()
                 
                 if device == "cuda" and has_xformers:
@@ -114,9 +114,11 @@ class PipelineManager:
     def update_controlnet(self, controlnet_type: str):
         """Enable or disable ControlNet dynamically based on the dropdown selection."""
         if controlnet_type == "None":
-            self.controlnet_model = None
+            self.controlnet_model = None    
+            if self.active_controlnet!=None:
+                print("ControlNet disabled.") 
             self.active_controlnet = None
-            print("ControlNet disabled.")
+            
         else:
             controlnet_model_map = {                
                 "Canny - lllyasviel/control_v11p_sd15_canny": "lllyasviel/control_v11p_sd15_canny",

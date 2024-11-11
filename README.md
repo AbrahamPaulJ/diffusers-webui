@@ -72,6 +72,8 @@ python app.py
 
 # Images
 
+![Screenshot](images/txt2img.png)
+
 ![Screenshot](images/inpaint.png)
 
 ![Screenshot](images/outpaint.png)
