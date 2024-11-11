@@ -1,6 +1,6 @@
 # modules/txt2img.py
 
-from modules import is_local, load_embeddings_for_prompt, flush, loaded_embeddings
+from modules import is_local, device, has_xformers, load_embeddings_for_prompt, flush, loaded_embeddings
 from modules.pipelines import PipelineManager
 from modules.image_processing import create_control_image
 
@@ -119,10 +119,14 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
         pipe.unet.set_attn_processor(AttnProcessor2_0())
 
         i2ipipe.enable_vae_tiling()
+        
+        if device == "cuda" and has_xformers:
+            i2ipipe.enable_xformers_memory_efficient_attention()
+            
+        if device == "cuda":
+            i2ipipe.enable_model_cpu_offload()
 
         i2ipipe.unet.set_attn_processor(AttnProcessor2_0())
-        
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         model = RealESRGAN(device, scale=4)
         model.load_weights('models\RealESRGAN_x4.pth', download=False)

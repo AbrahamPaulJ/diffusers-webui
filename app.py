@@ -18,7 +18,7 @@ class StableDiffusionApp:
         self.model_dir = model_dir
         self.pipeline_manager = PipelineManager(model_dir)
         # Load the default inpainting pipeline
-        #self.pipeline_manager.load_pipeline()
+        # self.pipeline_manager.load_pipeline()
         self.setup_gradio_interface()
 
     def setup_gradio_interface(self):
@@ -60,8 +60,10 @@ class StableDiffusionApp:
                         else file
                         for file in os.listdir(models_folder)
                         if (file.endswith((".safetensors", ".ckpt")) or 
-                            (os.path.isdir(os.path.join(models_folder, file)) and "control" not in file.lower()))
+                            (os.path.isdir(os.path.join(models_folder, file)) and 
+                            "control" not in file.lower() and not file.startswith(".")))
                     ]
+
                     
                     with gr.Row(equal_height=True):
                         # Dropdown for selecting inpainting checkpoint
@@ -194,6 +196,12 @@ class StableDiffusionApp:
                     reuse_seed_btn.click(fn=recycle_seed,inputs=output_seed, outputs=seed)
                     
                     generate_button.click(
+                        fn=warn_no_image,
+                        inputs=None,
+                        outputs=None 
+                    )
+                    
+                    generate_button.click(
                         fn=generating,
                         inputs=None,
                         outputs=generate_button  
@@ -206,14 +214,14 @@ class StableDiffusionApp:
                     )
 
                     generate_button.click(
-                        fn=make_visible,
-                        inputs=None,
+                        fn=i2i_make_visible,
+                        inputs=inpaint_input_image,
                         outputs=[output_seed]
                     )
 
                     generate_button.click(
-                        fn=make_visible,
-                        inputs=None,
+                        fn=i2i_make_visible,
+                        inputs=inpaint_input_image,
                         outputs=[output_image]
                     )
                     
@@ -225,7 +233,7 @@ class StableDiffusionApp:
                                                                    
                     load_status.change(
                         fn=self.seed_and_gen_inpaint_image,
-                        inputs=[controlnet_dropdown, seed, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, inpaint_input_image, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
+                        inputs=[controlnet_dropdown, seed,inpaint_input_image, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
@@ -289,8 +297,7 @@ class StableDiffusionApp:
                                     with gr.Column():        
                                         txt2img_clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2], value=1)
                                         txt2img_batch_size = gr.Slider(label="Batch Size", minimum=1, maximum=8, value=1, step=1)
-                                    
-                                txt2img_control_image = gr.Image(type="pil", label="Control Image", height=200, visible=False)
+                                
                                 with gr.Row():                          
                                     txt2img_controlnet_dropdown = gr.Dropdown(
                                             label="Select Controlnet", 
@@ -298,7 +305,7 @@ class StableDiffusionApp:
                                             value="None"
                                         )
                                     txt2img_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01, visible=False)
-                                    
+                                txt2img_control_image = gr.Image(type="pil", label="Control Image", height=300, visible=False)
                                 
                                     
                         txt2img_output_image = gr.Gallery(type="pil", label="Generated Image(s)", selected_index=0, columns=1, rows=1, visible=True)
@@ -375,7 +382,7 @@ class StableDiffusionApp:
                     txt2img_use_lora.change(fn=using_lora, inputs=txt2img_use_lora, outputs=[txt2img_lora_dropdown,txt2img_lora_prompt])
                     txt2img_use_lora.change(fn=lora_to_prompt_cb,inputs=[txt2img_steps,txt2img_lora_dropdown],outputs=txt2img_lora_prompt)
                     txt2img_lora_dropdown.change(fn=lora_to_prompt, inputs=txt2img_lora_dropdown,outputs=txt2img_lora_prompt)
-                    txt2img_clear_button.click(fn=hide, inputs=None, outputs=txt2img_output_image)          
+                    txt2img_clear_button.click(fn=clear, inputs=None, outputs=txt2img_output_image)          
                 
                 with gr.TabItem("PNG Info"):
                     with gr.Row():
@@ -532,8 +539,11 @@ class StableDiffusionApp:
         return load_status
         
     
-    def seed_and_gen_inpaint_image(self, controlnet_name, seed, *args):
+    def seed_and_gen_inpaint_image(self, controlnet_name, seed, input_image, *args):
         """Generate an inpainted image after loading the appropriate model."""
+        
+        if input_image is None:
+            return gr.update(interactive=True, value="Generate Image"),str(seed), []
 
         if seed is None or seed == "" or seed == -1:
             # Generate a random seed if not provided
@@ -545,12 +555,15 @@ class StableDiffusionApp:
         # Generate the inpainted image with the loaded pipeline
         
         return gr.update(interactive=True, value="Generate Image"), str(seed), generate_inpaint_image(
-            self.pipeline_manager, controlnet_name, seed, generator,
+            self.pipeline_manager, controlnet_name, seed, input_image, generator,
             *args)
         
 
-
     def parse_lora_prompt(self, lora_prompt):
+        # Return None if the lora_prompt is an empty string
+        if lora_prompt == "":
+            return None
+        
         # Find all matches for the LoRA name and scale using regular expressions
         lora_matches = re.findall(r"<lora:([^:]+):([\d.]+)>", lora_prompt)
         

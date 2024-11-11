@@ -7,16 +7,11 @@ from compel import Compel, DiffusersTextualInversionManager
 import torch
 import os
 import traceback
-import importlib.util
-from modules import IN_COLAB, SCHEDULERS, device, flush
+from modules import IN_COLAB, SCHEDULERS, device, vram, has_xformers, torch_dtype, flush
 
 if IN_COLAB:
     print("Colab environment detected: Safety checker enabled.")
     
-torch_dtype = torch.float16 if device == "cuda" else torch.float32
-has_xformers = importlib.util.find_spec("xformers") is not None
-print(f"xformers available: {has_xformers}")
-
 class PipelineManager:
     def __init__(self, model_dir: str):
         self.model_dir = model_dir
@@ -40,7 +35,7 @@ class PipelineManager:
                                 (controlnet_type != "None" and current_control_net_type == "None")
                                                   
         pipe_reload_condition = (checkpoint_name != self.active_checkpoint) or controlnet_changed or (pipeline_type != self.active_pipeline_type) or (self.active_lora_dict!=lora_dict)
-        
+             
         # Reload if a new checkpoint or ControlNet type is specified
         if pipe_reload_condition:
             if self.active_pipe is not None:
@@ -79,8 +74,10 @@ class PipelineManager:
                 self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,textual_inversion_manager=textual_inversion_manager, truncate_long_prompts=False)
                                 
                 # Move the pipeline to GPU if available.
-                self.active_pipe = pipe.to(device)
-                print(f"Using device: {device}")
+                self.active_pipe = pipe
+                if vram < 7:
+                    print(f"VAE tiling enabled. RAM :{vram}")
+                    self.active_pipe.enable_vae_tiling()
                 
                 if device == "cuda" and has_xformers:
                     self.active_pipe.enable_xformers_memory_efficient_attention()
@@ -88,6 +85,17 @@ class PipelineManager:
                 self.active_checkpoint = checkpoint_name
                 self.active_pipeline_type = pipeline_type  # Update active pipeline type
                 
+                if device == "cuda":
+                    self.active_pipe.enable_model_cpu_offload()
+                    
+                    current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
+                    print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
+                
+                # print(f"PRC:{pipe_reload_condition}")
+                # print(f"CnC:{controlnet_changed}")
+                # print(f"PTC{(pipeline_type != self.active_pipeline_type)}")
+                # print(f"LC:{(self.active_lora_dict!=lora_dict)}")
+                # print(f"CkC:{(checkpoint_name != self.active_checkpoint)}")
                 print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
 
             except Exception as e:
@@ -103,12 +111,6 @@ class PipelineManager:
         
         self.update_lora(use_lora, lora_dict)
             
-        if device == "cuda":
-            self.active_pipe.enable_model_cpu_offload()
-            
-            current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
-            print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
-
     def update_controlnet(self, controlnet_type: str):
         """Enable or disable ControlNet dynamically based on the dropdown selection."""
         if controlnet_type == "None":

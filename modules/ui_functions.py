@@ -12,8 +12,17 @@ def clear_gallery():
 def make_visible():
     return gr.update(visible=True)
 
+def i2i_make_visible(img):
+    if img!=None:
+        return gr.update(visible=True)
+    else:
+        return gr.update(visible=False)
+
 def hide():
     return gr.update(visible=False)
+
+def clear():
+    return []
                         
 def button_is_waiting():
     return gr.update(interactive=False, value="Loading...")
@@ -53,6 +62,10 @@ def auto_dim(image):
         return auto_select_dimensions(image)
     else:
         return 512,512
+    
+def warn_no_image(img):
+    if img==None:
+        gr.Warning('Please upload an image.')
     
 def upload_control_img(controlnet_dropdown):
     if controlnet_dropdown!="None":

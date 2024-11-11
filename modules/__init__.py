@@ -2,6 +2,7 @@ import os
 import diffusers.schedulers 
 import gc
 import torch
+import importlib.util
 
 try:
   import google.colab # type: ignore
@@ -10,6 +11,10 @@ except:
   IN_COLAB = False
   
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+torch_dtype = torch.float16 if device == "cuda" else torch.float32
+has_xformers = importlib.util.find_spec("xformers") is not None
+print(f"xformers available: {has_xformers}")
   
 is_local = os.getenv("MYAPP_DEV_ENV") == "true"
 
@@ -35,7 +40,6 @@ SCHEDULERS = {
 }
 
 loaded_embeddings = set()
-
 
 import os
 
@@ -75,3 +79,16 @@ def flush():
     gc.collect()
     if device == "cuda":
       torch.cuda.empty_cache()
+      
+def get_vram():
+    if torch.cuda.is_available():
+        total_vram = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)  # Convert bytes to GB
+        print(f"VRAM: {total_vram}")
+        return total_vram
+    else:
+        return 0  # Return 0 if no GPU is available
+      
+      
+vram = get_vram()
+
+ 
