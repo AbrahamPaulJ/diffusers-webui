@@ -197,7 +197,7 @@ class StableDiffusionApp:
                     
                     generate_button.click(
                         fn=warn_no_image,
-                        inputs=None,
+                        inputs=inpaint_input_image,
                         outputs=None 
                     )
                     
