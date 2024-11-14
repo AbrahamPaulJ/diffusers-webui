@@ -31,22 +31,66 @@ def generating():
     return gr.update(interactive=False, value="Generating...")
  
 def toggle_mode(mode):
+    if mode=="Image To Image":
+        return gr.update(visible=False)
     if mode=="Inpaint":
         brush = gr.Brush(colors=["#000000"], color_mode='fixed',default_size=50)
-        return gr.update(brush=brush, transforms=())
+        return gr.update(brush=brush, transforms=(), visible=True)
     if mode=="Outpaint":
-        return gr.update(brush=False, transforms=('crop'))
+        return gr.update(brush=False, transforms=('crop'),visible=True)
     
-def toggle_mode_hide(mode,component_hide_count):
-    # Determine the visibility state based on the mode
-    visible = (mode == "Inpaint")  # True if Inpaint 
-    updates = [gr.update(visible=visible) for _ in range(component_hide_count)] 
-    return updates  # Return the list of updates
+def toggle_mode_hide_i2i(mode,component_hide_count_i2i):
+    if mode=="Image To Image":
+        updates = [gr.update(visible=False) for _ in range(component_hide_count_i2i)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_i2i)] 
 
-def toggle_mode_show(mode,component_show_count):
-    visible = (mode == "Outpaint")  # True if Outpaint
-    updates = [gr.update(visible=visible) for _ in range(component_show_count)] 
-    return updates  # Return the list of updates
+def toggle_mode_show_i2i(mode,component_hide_count_i2i):
+    if mode=="Image To Image":
+        updates = [gr.update(visible=True) for _ in range(component_hide_count_i2i)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_i2i)] 
+    
+def toggle_mode_hide_ip(mode,component_hide_count_ip):
+    if mode=="Inpaint":
+        updates = [gr.update(visible=False) for _ in range(component_hide_count_ip)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_ip)] 
+
+def toggle_mode_show_ip(mode,component_hide_count_ip):
+    if mode=="Inpaint":
+        updates = [gr.update(visible=True) for _ in range(component_hide_count_ip)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_ip)] 
+    
+def toggle_mode_hide_op(mode,component_hide_count_op):
+    if mode=="Outpaint":
+        updates = [gr.update(visible=False) for _ in range(component_hide_count_op)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_op)] 
+
+def toggle_mode_show_op(mode,component_hide_count_op):
+    if mode=="Outpaint":
+        updates = [gr.update(visible=True) for _ in range(component_hide_count_op)] 
+        return updates
+    else:
+        return [gr.update() for _ in range(component_hide_count_op)] 
+    
+# def toggle_mode_hide(mode,component_hide_count):
+#     # Determine the visibility state based on the mode
+#     visible = (mode == "Inpaint")  # True if Inpaint 
+#     updates = [gr.update(visible=visible) for _ in range(component_hide_count)] 
+#     return updates  # Return the list of updates
+
+# def toggle_mode_show(mode,component_show_count):
+#     visible = (mode == "Outpaint")  # True if Outpaint
+#     updates = [gr.update(visible=visible) for _ in range(component_show_count)] 
+#     return updates  # Return the list of updates
 
 def reset_seed():
     return -1
@@ -158,7 +202,7 @@ def extract_metadata(info):
 
 
 
-def load_info_to_inpaint(info,state):
+def load_info_to_img2img(info,state):
     # Extract metadata
     parameters = extract_metadata(info)
     

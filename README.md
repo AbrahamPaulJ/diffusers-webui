@@ -30,20 +30,24 @@ python app.py
 
 # Features
 
-- Inpainting tab: Allows inpainting and outpainting with the API:
-[StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint).
+- Image To Image tab: Allows image-to-image, inpainting and outpainting with the APIs:
+[StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
+and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint)
 
     - Implemented features:
-
-        - Manual Brush Tool: Allows users to create the image mask (inpaint mode).
-        
-        - Gaussian Blur Slider: For applying blur to the mask edges.
-        
-        - Post-Processing Option: Retains original non-masked areas after image generation. 
 
         - ControlNet support: Canny, Depth and Openpose.
 
         - Support for multiple LoRA and embedding files (textual inversion).
+
+        - Inpaint Mode:
+
+            - Manual Brush Tool: Allows users to create a image mask (inpaint mode).
+            
+            - Gaussian Blur Slider: For applying blur to the mask edges.
+            
+            - Post-Processing Option: Retains original non-masked areas after image generation. 
+        
 
         - Outpaint Mode: Outpainting is done using the inpaint pipeline, where the a black background canvas is used as a mask.       
               
@@ -53,7 +57,7 @@ python app.py
             - You can choose where to place the image on the canvas using the 
             "Image Positioned at:" option.
 
-            - You can control output size by choosing "Maximum Width/Height".
+            - You can control output image size by adjusting the "Maximum Width/Height" parameter.
         
 
 - Text to Image tab: Generates images from prompts using the API:

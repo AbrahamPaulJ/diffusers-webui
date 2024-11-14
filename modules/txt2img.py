@@ -86,8 +86,9 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
-    metadata.add_text("controlnet", str(controlnet_name))
-    metadata.add_text("controlnet_strength", str(controlnet_strength))
+    if controlnet_name!="None":
+        metadata.add_text("controlnet", str(controlnet_name))
+        metadata.add_text("controlnet_strength", str(controlnet_strength))
     metadata.add_text("seed", str(seed))
     metadata.add_text("prompt", prompt)
     metadata.add_text("negative_prompt", negative_prompt)

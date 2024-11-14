@@ -1,5 +1,6 @@
 from diffusers import (
-    StableDiffusionControlNetInpaintPipeline, StableDiffusionInpaintPipeline,
+     StableDiffusionImg2ImgPipeline, StableDiffusionControlNetImg2ImgPipeline,
+    StableDiffusionInpaintPipeline, StableDiffusionControlNetInpaintPipeline, 
     StableDiffusionPipeline, StableDiffusionControlNetPipeline, ControlNetModel
 )
 from compel import Compel, DiffusersTextualInversionManager
@@ -25,7 +26,7 @@ class PipelineManager:
         self.compel=None
         
     def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                      pipeline_type: str = "inpainting", scheduler: str = "DPM++_2M_KARRAS", 
+                      pipeline_type: str = "img2img", scheduler: str = "DPM++_2M_KARRAS", 
                       controlnet_type: str = "None", use_lora: bool = False, lora_dict: dict = None):  # New parameter for LoRA
         """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
              
@@ -46,6 +47,8 @@ class PipelineManager:
             try:
                 # Define pipeline class based on type and ControlNet usage
                 pipeline_classes = {
+                    ('img2img', True): StableDiffusionControlNetImg2ImgPipeline,
+                    ('img2img', False): StableDiffusionImg2ImgPipeline,
                     ('inpainting', True): StableDiffusionControlNetInpaintPipeline,
                     ('inpainting', False): StableDiffusionInpaintPipeline,
                     ('txt2img', True): StableDiffusionControlNetPipeline,
@@ -55,6 +58,7 @@ class PipelineManager:
                 # Determine if ControlNet is used
                 is_controlnet = controlnet_type != "None"
                 pipeline_class = pipeline_classes.get((pipeline_type, is_controlnet))
+                
                 if not pipeline_class:
                     raise ValueError("Invalid pipeline type specified.")
 

@@ -19,7 +19,9 @@ print(f"xformers available: {HAS_XFORMERS}")
 IS_LOCAL = os.getenv("MYAPP_DEV_ENV") == "true"
 
 SCHEDULERS = {
-    "DPM++_2M_KARRAS": diffusers.schedulers.DPMSolverMultistepScheduler,  # Add this entry
+    "DPM++_2M_KARRAS": diffusers.schedulers.DPMSolverMultistepScheduler,  
+    "DPM++_SDE_KARRAS": diffusers.schedulers.DPMSolverSDEScheduler,  
+    "DPM++_SDE": diffusers.schedulers.DPMSolverSDEScheduler,
     "DPM++_2M": diffusers.schedulers.DPMSolverMultistepScheduler,
     "EULER_A": diffusers.schedulers.EulerAncestralDiscreteScheduler,
     "EULER": diffusers.schedulers.EulerDiscreteScheduler,
@@ -29,8 +31,6 @@ SCHEDULERS = {
     "DPM2": diffusers.schedulers.KDPM2DiscreteScheduler,
     "DPM2-A": diffusers.schedulers.KDPM2AncestralDiscreteScheduler,
     "DPM++_2S": diffusers.schedulers.DPMSolverSinglestepScheduler,
-    "DPM++_SDE": diffusers.schedulers.DPMSolverSDEScheduler,
-    "DPM++_SDE_KARRAS": diffusers.schedulers.DPMSolverSDEScheduler,  # Add this entry
     "UNIPC": diffusers.schedulers.UniPCMultistepScheduler,
     "HEUN": diffusers.schedulers.HeunDiscreteScheduler,
     "HEUN_KARRAS": diffusers.schedulers.HeunDiscreteScheduler,

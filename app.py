@@ -1,7 +1,7 @@
 # app.py
 
 import gradio as gr
-from modules.inpainting import *
+from modules.img2img import *
 from modules.txt2img import *
 from modules.manage_models import model_dir
 from modules.pipelines import PipelineManager
@@ -16,12 +16,12 @@ class StableDiffusionApp:
     def __init__(self, model_dir):
         self.model_dir = model_dir
         self.pipeline_manager = PipelineManager(model_dir)
-        # Load the default inpainting pipeline
+        # Load the default pipeline
         # self.pipeline_manager.load_pipeline()
         self.setup_gradio_interface()
 
     def setup_gradio_interface(self):
-        """Create the Gradio interface with tabs for inpainting, text-to-image, and more."""
+        """Create the Gradio interface with tabs for image-to-image, text-to-image, and more."""
                
         with gr.Blocks(
             
@@ -47,7 +47,7 @@ class StableDiffusionApp:
 
             # Create the tabs
             with gr.Tabs():
-                # Inpainting Tab
+                # Image To Image Tab
                 with gr.TabItem("Image To Image"):
                     brush = gr.Brush(colors=["#000000"], color_mode='fixed',default_size=50)
                     load_status = gr.State(value=0)
@@ -65,7 +65,7 @@ class StableDiffusionApp:
 
                     
                     with gr.Row(equal_height=True):
-                        # Dropdown for selecting inpainting checkpoint
+                        # Dropdown for selecting checkpoint
                         checkpoint_dropdown = gr.Dropdown(
                             label="Select Checkpoint", 
                             choices = model_choices, 
@@ -105,8 +105,8 @@ class StableDiffusionApp:
                         #lora_refresh_btn = gr.Button("🔄")
                                        
                     with gr.Row():
-                        inpaint_input_image = gr.Image(type="pil", label="Input Image", height=600)
-                        inpaint_mask = gr.ImageEditor(type="pil", label="Mask Editor", height=600, brush=brush, transforms=(), sources=('clipboard'), placeholder="Mask Preview", layers=False)
+                        input_image = gr.Image(type="pil", label="Input Image", height=600)
+                        inpaint_mask = gr.ImageEditor(type="pil", label="Mask Editor", height=600, brush=brush, transforms=(), sources=('clipboard'), placeholder="Mask Preview", layers=False, visible=False)
                         output_image = gr.Gallery(type="pil", label="Generated Image(s)", height=600, selected_index=0, columns=1, rows=1, visible=False)
 
                     with gr.Row(equal_height=True):
@@ -114,19 +114,19 @@ class StableDiffusionApp:
                             with gr.Row():
                                 width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512, allow_custom_value=True)
                                 height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=512, allow_custom_value=True)
-                            mode = gr.Radio(["Inpaint", "Outpaint"], value="Inpaint", label = "Mode")
-                            mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=40, value=0, step=0.1)
+                            mode = gr.Radio(["Image To Image", "Inpaint", "Outpaint"], value="Image To Image", label = "Mode")
+                            mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=40, value=0, step=0.1, visible =False)
 
                         with gr.Column(scale=1):
-                            fill_setting = gr.Radio(label="Mask", choices=["Inpaint Masked", "Inpaint Not Masked"], value="Inpaint Masked")
-                            steps = gr.Slider(label="Number of Steps", value=25, maximum=50, minimum=1,step=1)
-                            denoise_strength = gr.Slider(label="Denoise Strength", minimum=0, maximum=1, value=1, step=0.01)
+                            fill_setting = gr.Radio(label="Mask", choices=["Inpaint Masked", "Inpaint Not Masked"], value="Inpaint Masked", visible=False)
+                            steps = gr.Slider(label="Number of Steps", value=20, maximum=50, minimum=1,step=1)
+                            denoise_strength = gr.Slider(label="Denoise Strength", minimum=0, maximum=1, value=0.75, step=0.01)
                             outpaint_img_pos = gr.Radio(label="Image Positioned at:", choices=["Center", "Top", "Bottom"], value="Center", visible=False)
                             outpaint_max_dim = gr.Dropdown(label="Maximum Width/Height", choices=[512, 768, 1024], value=768, visible=False, allow_custom_value=True)
                             
                         with gr.Column(scale=1):
                             maintain_aspect_ratio = gr.Checkbox(label="Maintain Aspect Ratio (Auto Padding)", value=True)
-                            post_process = gr.Checkbox(label="Post-Processing", value=True)
+                            post_process = gr.Checkbox(label="Post-Processing", value=True, visible=False)
                             controlnet_dropdown = gr.Dropdown(
                             label="Select Controlnet", 
                             choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
@@ -158,23 +158,36 @@ class StableDiffusionApp:
                                 
                         clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2], value=1)
 
-   
-                    toggle_mode_hide_components = [fill_setting, maintain_aspect_ratio]
-                    component_hide_len = len(toggle_mode_hide_components)
-                    component_hide_count = gr.State(value=component_hide_len)
+                    toggle_mode_hide_components_i2i = [inpaint_mask,mask_blur,fill_setting,post_process]
+                    component_hide_count_i2i = gr.State(value=len(toggle_mode_hide_components_i2i))
                     
-                    toggle_mode_show_components = [outpaint_img_pos,outpaint_max_dim]
-                    component_show_len = len(toggle_mode_show_components)
-                    component_show_count = gr.State(value=component_show_len)
+                    toggle_mode_show_components_i2i = [maintain_aspect_ratio]
+                    component_show_count_i2i = gr.State(value=len(toggle_mode_show_components_i2i))
+                    
+                    toggle_mode_show_components_op = [mask_blur,post_process,outpaint_img_pos,outpaint_max_dim]
+                    component_show_count_op = gr.State(value=len(toggle_mode_show_components_op))
+                    
+                    toggle_mode_hide_components_op = [fill_setting, maintain_aspect_ratio]
+                    component_hide_count_op = gr.State(value=len(toggle_mode_hide_components_op))
+                    
+                    toggle_mode_show_components_ip = [mask_blur,post_process,fill_setting,maintain_aspect_ratio]
+                    component_show_count_ip = gr.State(value=len(toggle_mode_show_components_ip))
+                    
+                    toggle_mode_hide_components_ip = [outpaint_img_pos,outpaint_max_dim]
+                    component_hide_count_ip = gr.State(value=len(toggle_mode_hide_components_ip))
                     
                     # Listen for events
-                    inpaint_input_image.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
-                    inpaint_input_image.change(fn=auto_dim, inputs=[inpaint_input_image],outputs=[width,height])
-                    outpaint_img_pos.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
-                    mode.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, inpaint_input_image], outputs=[inpaint_mask])
+                    input_image.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, input_image], outputs=[inpaint_mask])
+                    input_image.change(fn=auto_dim, inputs=[input_image],outputs=[width,height])
+                    outpaint_img_pos.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, input_image], outputs=[inpaint_mask])
+                    mode.change(fn=retrieve_mask, inputs=[mode, outpaint_img_pos, input_image], outputs=[inpaint_mask])
                     mode.change(fn=toggle_mode,inputs=[mode], outputs=inpaint_mask)
-                    mode.change(fn=toggle_mode_hide,inputs=[mode,component_hide_count], outputs=toggle_mode_hide_components)
-                    mode.change(fn=toggle_mode_show,inputs=[mode,component_show_count], outputs=toggle_mode_show_components)
+                    mode.change(fn=toggle_mode_hide_i2i, inputs=[mode,component_hide_count_i2i], outputs = toggle_mode_hide_components_i2i)
+                    mode.change(fn=toggle_mode_show_i2i, inputs=[mode,component_show_count_i2i], outputs = toggle_mode_show_components_i2i) 
+                    mode.change(fn=toggle_mode_hide_ip, inputs=[mode,component_hide_count_ip], outputs = toggle_mode_hide_components_ip)
+                    mode.change(fn=toggle_mode_show_ip, inputs=[mode,component_show_count_ip], outputs = toggle_mode_show_components_ip)
+                    mode.change(fn=toggle_mode_hide_op, inputs=[mode,component_hide_count_op], outputs = toggle_mode_hide_components_op)
+                    mode.change(fn=toggle_mode_show_op, inputs=[mode,component_show_count_op], outputs = toggle_mode_show_components_op)
                            
                     gr.on(
                         triggers=[checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
@@ -184,9 +197,9 @@ class StableDiffusionApp:
                     )
                             
                     gr.on(
-                        triggers=[checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
-                        fn=self.load_inpaint,
-                        inputs=[checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, use_lora, lora_prompt],
+                        triggers=[checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change, mode.change],
+                        fn=self.load_img,
+                        inputs=[checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, use_lora, lora_prompt, mode],
                         outputs=generate_button
                     )
 
@@ -196,7 +209,7 @@ class StableDiffusionApp:
                     
                     generate_button.click(
                         fn=warn_no_image,
-                        inputs=inpaint_input_image,
+                        inputs=input_image,
                         outputs=None 
                     )
                     
@@ -214,25 +227,25 @@ class StableDiffusionApp:
 
                     generate_button.click(
                         fn=i2i_make_visible,
-                        inputs=inpaint_input_image,
+                        inputs=input_image,
                         outputs=[output_seed]
                     )
 
                     generate_button.click(
                         fn=i2i_make_visible,
-                        inputs=inpaint_input_image,
+                        inputs=input_image,
                         outputs=[output_image]
                     )
                     
                     generate_button.click(
-                        fn=self.load_and_seed_gen_inpaint,
-                        inputs=[load_status, checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown,use_lora, lora_prompt],
+                        fn=self.load_and_seed_gen_img,
+                        inputs=[load_status, checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown,use_lora, lora_prompt, mode],
                         outputs=[load_status]
                     )
                                                                    
                     load_status.change(
-                        fn=self.seed_and_gen_inpaint_image,
-                        inputs=[controlnet_dropdown, seed,inpaint_input_image, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
+                        fn=self.seed_and_gen_img,
+                        inputs=[controlnet_dropdown, seed,input_image, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
@@ -245,8 +258,8 @@ class StableDiffusionApp:
                     #lora_refresh_btn.click(fn=update_lora_dropdown, outputs=lora_dropdown)
                     #upscalefour.click(fn=upscale, inputs=output_image, outputs=output_image)
 
-                # Text-to-Image Tab
-                with gr.TabItem("Text-to-Image"):
+                # Text To Image Tab
+                with gr.TabItem("Text To Image"):
                     txt2img_load_status = gr.State(value=0)
                     with gr.Row(equal_height=True):
 
@@ -284,7 +297,7 @@ class StableDiffusionApp:
                                     txt2img_width = gr.Dropdown(label="Width", choices=[512, 768, 1024], value=512,allow_custom_value=True)
                                     txt2img_height = gr.Dropdown(label="Height", choices=[512, 768, 1024], value=512,allow_custom_value=True)
                                 with gr.Row():
-                                    txt2img_steps = gr.Slider(label="Number of Steps", value=25, maximum=50, minimum=1,step=1)
+                                    txt2img_steps = gr.Slider(label="Number of Steps", value=20, maximum=50, minimum=1,step=1)
                                     txt2img_cfg_scale = gr.Slider(label="CFG Scale", value=7, minimum=0, maximum=20, step=0.5)
                                     txt2img_hires_fix = gr.Checkbox(label="Hires. fix - Latent 2x", value=False)
                                 with gr.Row(equal_height=True):
@@ -389,15 +402,15 @@ class StableDiffusionApp:
                         with gr.Column():
                             png_info = gr.Textbox(label="Generation Parameters",lines=25, show_copy_button=True,show_label=True)
                             with gr.Row(equal_height=True):
-                                info_to_inpaint_btn = gr.Button("Send Parameters to Inpaint Tab",visible=False)   
+                                info_to_img2img_btn = gr.Button("Send Parameters to Image To Image Tab",visible=False)   
                                 info_to_txt2img_btn = gr.Button("Send Parameters to Text to Image Tab",visible=False)  
                                 state= gr.State(value=0)                            
                                                
                     #Listeners
-                    png_input_image.change(fn=get_metadata, inputs=png_input_image, outputs=[png_info, info_to_inpaint_btn, info_to_txt2img_btn])
+                    png_input_image.change(fn=get_metadata, inputs=png_input_image, outputs=[png_info, info_to_img2img_btn, info_to_txt2img_btn])
                     
-                    info_to_inpaint_btn.click(
-                    fn=load_info_to_inpaint,
+                    info_to_img2img_btn.click(
+                    fn=load_info_to_img2img,
                     inputs=[png_info,state],
                     outputs=[
                         checkpoint_dropdown,
@@ -405,7 +418,7 @@ class StableDiffusionApp:
                         controlnet_dropdown,
                         controlnet_strength,
                         seed,
-                        inpaint_input_image,
+                        input_image,
                         prompt,  
                         negative_prompt,  
                         width,  
@@ -495,25 +508,28 @@ class StableDiffusionApp:
             self.pipeline_manager, controlnet_name, seed, generator,
             *args) 
             
-    def load_inpaint(self, checkpoint, scheduler, controlnet, use_lora, lora_dict, generate_button_clicked=False):
+    def load_img(self, checkpoint, scheduler, controlnet, use_lora, lora_dict, mode, generate_button_clicked=False):
         """Load the pipeline based on changes in the checkpoint or ControlNet selection."""
         if generate_button_clicked==False:
             lora_dict = self.parse_lora_prompt(lora_dict)
         # Load pipeline with the determined parameters
-        self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_dict=lora_dict)
+        if mode=="Image To Image":
+            self.pipeline_manager.load_pipeline(checkpoint, "img2img", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_dict=lora_dict)
+        else:
+            self.pipeline_manager.load_pipeline(checkpoint, "inpainting", scheduler, controlnet_type=controlnet, use_lora=use_lora, lora_dict=lora_dict)
         return gr.update(interactive=True, value="Generate Image") if generate_button_clicked is False else gr.update(interactive=False, value="Generating...")
     
-    def load_and_seed_gen_inpaint(self, load_status, checkpoint, scheduler, controlnet, use_lora, lora_prompt):
+    def load_and_seed_gen_img(self, load_status, checkpoint, scheduler, controlnet, use_lora, lora_dict, mode):
         """Load models and generate when generate button clicked."""
         
-        lora_dict=self.parse_lora_prompt(lora_prompt)
+        lora_dict=self.parse_lora_prompt(lora_dict)
         load_status ^= 1
-        self.load_inpaint(checkpoint, scheduler, controlnet, use_lora, lora_dict, generate_button_clicked=True)
+        self.load_img(checkpoint, scheduler, controlnet, use_lora, lora_dict, mode, generate_button_clicked=True)
         
         return load_status
         
     
-    def seed_and_gen_inpaint_image(self, controlnet_name, seed, input_image, *args):
+    def seed_and_gen_img(self, controlnet_name, seed, input_image, *args):
         """Generate an inpainted image after loading the appropriate model."""
         
         if input_image is None:
@@ -528,7 +544,7 @@ class StableDiffusionApp:
         generator = Generator().manual_seed(seed)  # Create a generator with the specified seed
         # Generate the inpainted image with the loaded pipeline
         
-        return gr.update(interactive=True, value="Generate Image"), str(seed), generate_inpaint_image(
+        return gr.update(interactive=True, value="Generate Image"), str(seed), generate_image(
             self.pipeline_manager, controlnet_name, seed, input_image, generator,
             *args)
         
