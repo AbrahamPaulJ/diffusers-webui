@@ -68,7 +68,7 @@ python app.py
 <!-- - Image Upscale tab: Includes ESRGAN upscaling options. -->
 
 - PNG Info tab: For previously generated images, featuring a view of the generation
- parameters and a "Send Parameters to Inpaint Tab" option.
+ parameters and options to send the parameters to other tabs.
 
 # Images
 
