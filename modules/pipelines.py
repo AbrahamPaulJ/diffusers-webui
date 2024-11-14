@@ -7,7 +7,7 @@ from compel import Compel, DiffusersTextualInversionManager
 import torch
 import os
 import traceback
-from modules import IN_COLAB, SCHEDULERS, device, vram, has_xformers, torch_dtype, flush
+from modules import IN_COLAB, SCHEDULERS, DEVICE, VRAM, HAS_XFORMERS, TORCH_DTYPE, flush
 
 if IN_COLAB:
     print("Colab environment detected: Safety checker enabled.")
@@ -64,7 +64,7 @@ class PipelineManager:
                 
                 pipe = load_method(
                     os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
-                    torch_dtype=torch_dtype,
+                    torch_dtype=TORCH_DTYPE,
                     controlnet= self.controlnet_model,
                     safety_checker=None,
                     requires_safety_checker=IN_COLAB,  # True in colab env
@@ -75,17 +75,17 @@ class PipelineManager:
                                 
                 # Move the pipeline to GPU if available.
                 self.active_pipe = pipe
-                if vram < 7:
+                if VRAM < 7:
                     print(f"VAE tiling enabled.")
                     self.active_pipe.enable_vae_tiling()
                 
-                if device == "cuda" and has_xformers:
+                if DEVICE == "cuda" and HAS_XFORMERS:
                     self.active_pipe.enable_xformers_memory_efficient_attention()
                           
                 self.active_checkpoint = checkpoint_name
                 self.active_pipeline_type = pipeline_type  # Update active pipeline type
                 
-                if device == "cuda":
+                if DEVICE == "cuda":
                     self.active_pipe.enable_model_cpu_offload()
                     
                     current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
@@ -131,8 +131,8 @@ class PipelineManager:
                     print(f"Loading ControlNet model: {controlnet_type}")
                     self.controlnet_model = ControlNetModel.from_pretrained(
                         model_name,
-                        torch_dtype=torch_dtype,
-                        cache_dir=self.model_dir
+                        torch_dtype=TORCH_DTYPE,
+                        cache_dir=self.model_dirs
                     )
                     self.active_controlnet = model_name
                     print(f"ControlNet model {controlnet_type} loaded.")

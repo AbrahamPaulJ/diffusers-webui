@@ -3,13 +3,12 @@
 import gradio as gr
 from modules.inpainting import *
 from modules.txt2img import *
-# from modules.upscale import upscale
 from modules.manage_models import model_dir
 from modules.pipelines import PipelineManager
 from torch import Generator
 import random   
 import re
-from modules import is_local
+from modules import IS_LOCAL
 
 from modules.ui_functions import *
 
@@ -49,7 +48,7 @@ class StableDiffusionApp:
             # Create the tabs
             with gr.Tabs():
                 # Inpainting Tab
-                with gr.TabItem("Inpainting"):
+                with gr.TabItem("Image To Image"):
                     brush = gr.Brush(colors=["#000000"], color_mode='fixed',default_size=50)
                     load_status = gr.State(value=0)
                     
@@ -67,8 +66,8 @@ class StableDiffusionApp:
                     
                     with gr.Row(equal_height=True):
                         # Dropdown for selecting inpainting checkpoint
-                        inpainting_checkpoint_dropdown = gr.Dropdown(
-                            label="Select Inpaint Checkpoint", 
+                        checkpoint_dropdown = gr.Dropdown(
+                            label="Select Checkpoint", 
                             choices = model_choices, 
                             value="stablediffusionapi/realistic-vision-v6.0-b1-inpaint"
                         )
@@ -178,16 +177,16 @@ class StableDiffusionApp:
                     mode.change(fn=toggle_mode_show,inputs=[mode,component_show_count], outputs=toggle_mode_show_components)
                            
                     gr.on(
-                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
+                        triggers=[checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
                         fn=button_is_waiting,
                         inputs=None,
                         outputs=generate_button
                     )
                             
                     gr.on(
-                        triggers=[inpainting_checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
+                        triggers=[checkpoint_dropdown.change, controlnet_dropdown.change, scheduler_dropdown.change],
                         fn=self.load_inpaint,
-                        inputs=[inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, use_lora, lora_prompt],
+                        inputs=[checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown, use_lora, lora_prompt],
                         outputs=generate_button
                     )
 
@@ -227,7 +226,7 @@ class StableDiffusionApp:
                     
                     generate_button.click(
                         fn=self.load_and_seed_gen_inpaint,
-                        inputs=[load_status, inpainting_checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown,use_lora, lora_prompt],
+                        inputs=[load_status, checkpoint_dropdown, scheduler_dropdown, controlnet_dropdown,use_lora, lora_prompt],
                         outputs=[load_status]
                     )
                                                                    
@@ -401,7 +400,7 @@ class StableDiffusionApp:
                     fn=load_info_to_inpaint,
                     inputs=[png_info,state],
                     outputs=[
-                        inpainting_checkpoint_dropdown,
+                        checkpoint_dropdown,
                         scheduler_dropdown,
                         controlnet_dropdown,
                         controlnet_strength,
@@ -457,34 +456,9 @@ class StableDiffusionApp:
                         fn=load_mask_to_inpaint,
                         inputs=png_info,
                         outputs=[inpaint_mask]
-                    )
-                                       
-                # Image Upscale Tab
-                # with gr.TabItem("Image Upscale"):
-                #     with gr.Row():
-                #         upscale_input_image = gr.Image(type="pil", label="Input Image", scale=2)
-                #         upscale_output_image = gr.Image(type="pil", label="Output Image", scale=4)  # Make this container larger
-                #     with gr.Row(equal_height=True):
-                #         upscale_factor = gr.Radio(label="Upscale Factor", choices=["2", "4"], value="4", type="value")
-                #         with gr.Column():
-                #             upscale_button = gr.Button("Upscale")
-                #             upscale_to_inpaint = gr.Button("Send to Inpaint Tab")
-                    
-                #     def send(img):
-                #         return img
-            
-                #     #Listeners   
-                #     upscale_button.click(
-                #         fn=upscale,
-                #         inputs=[upscale_input_image, upscale_factor],
-                #         outputs=upscale_output_image
-                #     )             
-                #     upscale_button.click(fn=upscale, inputs=[upscale_input_image, upscale_factor], outputs=upscale_output_image)
-                #     upscale_to_inpaint.click(fn=send,inputs=upscale_output_image, outputs=inpaint_input_image)
-             
-                #manage_models_tab()
+                    )                                    
 
-        iface.queue().launch(share= not is_local)
+        iface.queue().launch(share= not IS_LOCAL)
         
         
     def load_txt2img(self, checkpoint, scheduler, controlnet, use_lora, lora_dict, generate_button_clicked=False):

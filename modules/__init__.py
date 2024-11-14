@@ -10,13 +10,13 @@ try:
 except:
   IN_COLAB = False
   
-device = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-torch_dtype = torch.float16 if device == "cuda" else torch.float32
-has_xformers = importlib.util.find_spec("xformers") is not None
-print(f"xformers available: {has_xformers}")
+TORCH_DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
+HAS_XFORMERS = importlib.util.find_spec("xformers") is not None
+print(f"xformers available: {HAS_XFORMERS}")
   
-is_local = os.getenv("MYAPP_DEV_ENV") == "true"
+IS_LOCAL = os.getenv("MYAPP_DEV_ENV") == "true"
 
 SCHEDULERS = {
     "DPM++_2M_KARRAS": diffusers.schedulers.DPMSolverMultistepScheduler,  # Add this entry
@@ -77,18 +77,18 @@ def load_embeddings_for_prompt(pipe, prompt, negative_prompt=None):
           
 def flush():
     gc.collect()
-    if device == "cuda":
+    if DEVICE == "cuda":
       torch.cuda.empty_cache()
       
 def get_vram():
     if torch.cuda.is_available():
-        total_vram = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)  # Convert bytes to GB
+        total_vram = torch.cuda.get_device_properties(DEVICE).total_memory / (1024 ** 3)  # Convert bytes to GB
         print(f"VRAM: {total_vram}")
         return total_vram
     else:
         return 0  # Return 0 if no GPU is available
       
       
-vram = get_vram()
+VRAM = get_vram()
 
  

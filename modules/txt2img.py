@@ -1,6 +1,6 @@
 # modules/txt2img.py
 
-from modules import is_local, device, has_xformers, load_embeddings_for_prompt, flush, loaded_embeddings
+from modules import IS_LOCAL, DEVICE, HAS_XFORMERS, load_embeddings_for_prompt, flush, loaded_embeddings
 from modules.pipelines import PipelineManager
 from modules.image_processing import create_control_image
 
@@ -61,7 +61,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     if controlnet != None:
         control_image = create_control_image(control_input, controlnet)
         print(type(control_image))
-        if is_local:
+        if IS_LOCAL:
             control_image.save("controlimg.png")
         controlnet_strength = controlnet_strength
         pipe_kwargs["control_image"] = control_image
@@ -120,15 +120,15 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
 
         i2ipipe.enable_vae_tiling()
         
-        if device == "cuda" and has_xformers:
+        if DEVICE == "cuda" and HAS_XFORMERS:
             i2ipipe.enable_xformers_memory_efficient_attention()
             
-        if device == "cuda":
+        if DEVICE == "cuda":
             i2ipipe.enable_model_cpu_offload()
 
         i2ipipe.unet.set_attn_processor(AttnProcessor2_0())
 
-        model = RealESRGAN(device, scale=4)
+        model = RealESRGAN(DEVICE, scale=4)
         model.load_weights('models\RealESRGAN_x4.pth', download=False)
         print("Upscaling...")
         sr_image = model.predict(first_output_image)  
@@ -155,12 +155,12 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
         print("hires .fix applied successfully.")
              
         del i2ipipe
-        if device == "cuda":
+        if DEVICE == "cuda":
             torch.cuda.empty_cache() 
             
         generated_images[0].save(output_path, pnginfo=metadata)
         
-        if is_local:
+        if IS_LOCAL:
             first_output_image.save("outputtxt2img.png")
             
         return generated_images
@@ -168,7 +168,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     # Save the first image with its generation metadata
     first_output_image.save(output_path, pnginfo=metadata)
     
-    if is_local:
+    if IS_LOCAL:
         first_output_image.save("outputtxt2img.png")
 
     return generated_images
