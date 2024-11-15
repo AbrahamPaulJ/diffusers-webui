@@ -139,7 +139,7 @@ def add_padding(image, target_width, target_height, pad_color=None):
         raise ValueError("Input image is empty or not valid.")
 
     img_width, img_height = image.size
-    print(f"Original image size: {img_width}x{img_height}")  # Debugging line
+    # print(f"Original image size: {img_width}x{img_height}")  # Debugging line
     target_aspect_ratio = target_width / target_height
     current_aspect_ratio = img_width / img_height
 
@@ -155,7 +155,7 @@ def add_padding(image, target_width, target_height, pad_color=None):
     image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
     # Check the new image size after resizing
-    print(f"Resized image size (before padding): {image.size}")  # Debugging line
+    # print(f"Resized image size (before padding): {image.size}")  # Debugging line
     new_img_width, new_img_height = image.size
 
     # Calculate padding to reach target dimensions

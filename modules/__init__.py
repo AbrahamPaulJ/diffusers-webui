@@ -11,12 +11,13 @@ except:
   IN_COLAB = False
   
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 TORCH_DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
 HAS_XFORMERS = importlib.util.find_spec("xformers") is not None
 print(f"xformers available: {HAS_XFORMERS}")
   
 IS_LOCAL = os.getenv("MYAPP_DEV_ENV") == "true"
+
+MODEL_DIR = os.path.abspath("models")
 
 SCHEDULERS = {
     "DPM++_2M_KARRAS": diffusers.schedulers.DPMSolverMultistepScheduler,  

@@ -21,10 +21,12 @@ inpaintmaskimg.png
 outpaintmaskimg.png
 outpaintinputimg.png
 outputimg1.png
+output_t2i.png
 upscaled_image.jpg
 outputtxt2img.png
 modules/compel_alternative.py
 t2i_hires.png
+
 
 
 # Byte-compiled / optimized / DLL files

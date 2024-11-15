@@ -1,10 +1,13 @@
-  
+
+from modules import IS_LOCAL 
+from modules.image_processing import auto_select_dimensions, remove_background, create_composite, retrieve_mask
+
+from PIL import Image 
 import gradio as gr
 import os
 import random
-from modules.image_processing import auto_select_dimensions, remove_background, create_composite, retrieve_mask
-from PIL import Image
-  
+import time
+
 #Functions
 def clear_gallery():
     return []
@@ -23,6 +26,9 @@ def hide():
 
 def clear():
     return []
+
+def send_to_inpaint(imgs):
+    return imgs[0][0]
                         
 def button_is_waiting():
     return gr.update(interactive=False, value="Loading...")
@@ -81,17 +87,6 @@ def toggle_mode_show_op(mode,component_hide_count_op):
     else:
         return [gr.update() for _ in range(component_hide_count_op)] 
     
-# def toggle_mode_hide(mode,component_hide_count):
-#     # Determine the visibility state based on the mode
-#     visible = (mode == "Inpaint")  # True if Inpaint 
-#     updates = [gr.update(visible=visible) for _ in range(component_hide_count)] 
-#     return updates  # Return the list of updates
-
-# def toggle_mode_show(mode,component_show_count):
-#     visible = (mode == "Outpaint")  # True if Outpaint
-#     updates = [gr.update(visible=visible) for _ in range(component_show_count)] 
-#     return updates  # Return the list of updates
-
 def reset_seed():
     return -1
 
@@ -179,9 +174,9 @@ def get_metadata(image):
         output_path = output_path.replace("\\", "/")  # Assign back to output_path
     # print("Output Path:", output_path)  # Check the output path
     
-    txt2img_btn_visible = True if (output_path and output_path.startswith("outputs/txt2img")) else False
+    t2i_btn_visible = True if (output_path and output_path.startswith("outputs/txt2img")) else False
 
-    return "\n".join([f"{k}: {v}" for k, v in metadata.items()]), gr.update(visible=not txt2img_btn_visible), gr.update(visible=txt2img_btn_visible)
+    return "\n".join([f"{k}: {v}" for k, v in metadata.items()]), gr.update(visible=not t2i_btn_visible), gr.update(visible=t2i_btn_visible)
 
 
 
@@ -203,19 +198,27 @@ def extract_metadata(info):
 
 
 def load_info_to_img2img(info,state):
-    # Extract metadata
+    state^= 1
     parameters = extract_metadata(info)
     
     loras_used = parameters.get("loras_used", "")
     lora_list = loras_used.split(",") if loras_used else []
     lora_weights = parameters.get("lora_weights", "")
     
-    background_path = parameters.get("output_path")
-    background = Image.open(background_path)
-    state^= 1
+    
+    if parameters.get("mode") == "Inpaint":
+        background_path = parameters.get("output_path")
+        if background_path:
+            background = Image.open(background_path)
+        else:
+            background = None  
+    else:
+        background = None
+            
     
     # Return updates for each component based on the parsed parameters
     return (
+        parameters.get("base_model", "SD"),
         parameters.get("model/checkpoint", "stablediffusionapi/realistic-vision-v6.0-b1-inpaint"),
         parameters.get("scheduler", "DPMSolverMultistepScheduler"),
         parameters.get("controlnet", "None"),
@@ -226,17 +229,16 @@ def load_info_to_img2img(info,state):
         parameters.get("negative_prompt", ""),        
         int(parameters.get("width", 512)),              
         int(parameters.get("height", 768)),            
-        int(parameters.get("steps", 25)),   
+        int(parameters.get("steps", 20)),   
         float(parameters.get("mask_blur", 0)),       
         float(parameters.get("cfg_scale", 7.0)),     
         int(parameters.get("clip_skip", 1)),             
         parameters.get("fill_setting", "Inpaint Masked"),  
         parameters.get("maintain_aspect_ratio", "True") == "True", 
         parameters.get("post_process", "True") == "True",  
-        # parameters.get("custom_dimensions", "True") == "True",  
-        float(parameters.get("denoise_strength", 1.0)),  
+        float(parameters.get("denoise_strength", 0.75)),  
         int(parameters.get("batch_size", 1)),
-        parameters.get("mode", "Inpaint"),
+        parameters.get("mode", "Image To Image"),
         parameters.get("image_positioned_at", "Center"),
         parameters.get("maximum_width/height", 768),
         parameters.get("use_lora", "False") == "True",
@@ -245,7 +247,45 @@ def load_info_to_img2img(info,state):
         state
     )
     
-def load_info_to_txt2img(info):
+def load_mask_to_inpaint(info):
+    time.sleep(0.2)
+    # Extract metadata
+    parameters = extract_metadata(info)
+    if parameters.get("mode") == "Inpaint":
+        # Load the layer and background images
+        mask_path = parameters.get("mask_path")
+        background_path = parameters.get("output_path")
+    
+        try:
+            mask_image = Image.open(mask_path)
+            # Create layers using the removed background image
+            layers = [remove_background(mask_image)]
+            # if is_local:
+            #     layers[0].save("layer.png")
+            background = Image.open(background_path)
+        except Exception as e:
+            print(f"Error loading images: {e}")
+            layers = []  # Fallback to an empty list if there is an error
+            background = None
+
+        # Process the background image
+        background = retrieve_mask(image=background)
+        # if IS_LOCAL:
+        #     background.save("background.png")
+        composite = create_composite(background, layers[0])
+        # if IS_LOCAL:
+        #     composite.save("composite.png")
+        
+        # Return the images and layers dictionary
+        return {
+            "background": background,
+            "layers": layers,
+            "composite": composite
+        }
+    else:
+        return gr.update()
+    
+def load_info_to_t2i(info):
     # Extract metadata
     parameters = extract_metadata(info)
     loras_used = parameters.get("loras_used", "")
@@ -253,6 +293,7 @@ def load_info_to_txt2img(info):
     lora_weights = parameters.get("lora_weights", "")
 
     return (
+        parameters.get("base_model", "SD"),
         parameters.get("model/checkpoint", "runwayml/stable-diffusion-v1-5"),
         parameters.get("scheduler", "DPM++_2M_KARRAS"),
         parameters.get("controlnet", "None"),
@@ -262,7 +303,7 @@ def load_info_to_txt2img(info):
         parameters.get("negative_prompt", ""),        
         parameters.get("width", 512),              
         parameters.get("height", 512),            
-        int(parameters.get("steps", 25)),      
+        int(parameters.get("steps", 20)),      
         float(parameters.get("cfg_scale", 7.0)),     
         int(parameters.get("clip_skip", 1)),               
         int(parameters.get("batch_size", 1)),
@@ -272,37 +313,3 @@ def load_info_to_txt2img(info):
         lora_weights  # Return lora_weights
     )
     
-def load_mask_to_inpaint(info):
-    # Extract metadata
-    parameters = extract_metadata(info)
-    
-    # Load the layer and background images
-    mask_path = parameters.get("mask_path")
-    background_path = parameters.get("output_path")
-    
-    try:
-        mask_image = Image.open(mask_path)
-        # Create layers using the removed background image
-        layers = [remove_background(mask_image)]
-        # if is_local:
-        #     layers[0].save("layer.png")
-        background = Image.open(background_path)
-    except Exception as e:
-        print(f"Error loading images: {e}")
-        layers = []  # Fallback to an empty list if there is an error
-        background = None
-
-    # Process the background image
-    background = retrieve_mask(image=background)
-    # if is_local:
-    #     background.save("background.png")
-    composite = create_composite(background, layers[0])
-    # if is_local:
-    #     composite.save("composite.png")
-    
-    # Return the images and layers dictionary
-    return {
-        "background": background,
-        "layers": layers,
-        "composite": composite
-    }

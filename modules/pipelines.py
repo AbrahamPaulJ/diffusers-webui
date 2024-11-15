@@ -1,21 +1,25 @@
 from diffusers import (
-     StableDiffusionImg2ImgPipeline, StableDiffusionControlNetImg2ImgPipeline,
-    StableDiffusionInpaintPipeline, StableDiffusionControlNetInpaintPipeline, 
-    StableDiffusionPipeline, StableDiffusionControlNetPipeline, ControlNetModel
+    StableDiffusionImg2ImgPipeline, StableDiffusionControlNetImg2ImgPipeline,
+    StableDiffusionInpaintPipeline, StableDiffusionControlNetInpaintPipeline,
+    StableDiffusionPipeline, StableDiffusionControlNetPipeline,
+    StableDiffusionXLPipeline, StableDiffusionXLControlNetPipeline,
+    StableDiffusionXLImg2ImgPipeline, StableDiffusionXLControlNetImg2ImgPipeline,
+    StableDiffusionXLInpaintPipeline, ControlNetModel
 )
-from compel import Compel, DiffusersTextualInversionManager
+
+from compel import Compel, DiffusersTextualInversionManager, ReturnedEmbeddingsType
 
 import torch
 import os
 import traceback
-from modules import IN_COLAB, SCHEDULERS, DEVICE, VRAM, HAS_XFORMERS, TORCH_DTYPE, flush
+from modules import IN_COLAB, SCHEDULERS, DEVICE, VRAM, HAS_XFORMERS, TORCH_DTYPE, MODEL_DIR, flush
 
 if IN_COLAB:
     print("Colab environment detected: Safety checker enabled.")
     
 class PipelineManager:
-    def __init__(self, model_dir: str):
-        self.model_dir = model_dir
+    def __init__(self):
+        self.active_base_model = None
         self.active_pipe = None
         self.active_checkpoint = None
         self.active_scheduler = None
@@ -25,8 +29,8 @@ class PipelineManager:
         self.active_pipeline_type = None  # Track active pipeline type
         self.compel=None
         
-    def load_pipeline(self, checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
-                      pipeline_type: str = "img2img", scheduler: str = "DPM++_2M_KARRAS", 
+    def load_pipeline(self, base_model: str ="SD", checkpoint_name: str = "stablediffusionapi/realistic-vision-v6.0-b1-inpaint", 
+                      pipeline_type: str = "inpainting", scheduler: str = "DPM++_2M_KARRAS", 
                       controlnet_type: str = "None", use_lora: bool = False, lora_dict: dict = None):  # New parameter for LoRA
         """Load or update the pipeline as needed, handling model, scheduler, ControlNet, and LoRA adjustments."""
              
@@ -35,29 +39,38 @@ class PipelineManager:
         controlnet_changed = (controlnet_type == "None" and current_control_net_type != "None") or \
                                 (controlnet_type != "None" and current_control_net_type == "None")
                                                   
-        pipe_reload_condition = (checkpoint_name != self.active_checkpoint) or controlnet_changed or (pipeline_type != self.active_pipeline_type) or (self.active_lora_dict!=lora_dict)
+        pipe_reload_condition = (base_model!= self.active_base_model) or (pipeline_type != self.active_pipeline_type) or (checkpoint_name != self.active_checkpoint) or controlnet_changed or (self.active_lora_dict!=lora_dict)
              
         # Reload if a new checkpoint or ControlNet type is specified
         if pipe_reload_condition:
             if self.active_pipe is not None:
                 del self.active_pipe
+                del self.compel
                 flush()
                 print(f"Previous checkpoint {self.active_checkpoint} unloaded.")
 
             try:
                 # Define pipeline class based on type and ControlNet usage
                 pipeline_classes = {
-                    ('img2img', True): StableDiffusionControlNetImg2ImgPipeline,
-                    ('img2img', False): StableDiffusionImg2ImgPipeline,
-                    ('inpainting', True): StableDiffusionControlNetInpaintPipeline,
-                    ('inpainting', False): StableDiffusionInpaintPipeline,
-                    ('txt2img', True): StableDiffusionControlNetPipeline,
-                    ('txt2img', False): StableDiffusionPipeline,
-                }
+                # Stable Diffusion (SD)
+                ('SD', 'img2img', True): StableDiffusionControlNetImg2ImgPipeline,
+                ('SD', 'img2img', False): StableDiffusionImg2ImgPipeline,
+                ('SD', 'inpainting', True): StableDiffusionControlNetInpaintPipeline,
+                ('SD', 'inpainting', False): StableDiffusionInpaintPipeline,
+                ('SD', 'txt2img', True): StableDiffusionControlNetPipeline,
+                ('SD', 'txt2img', False): StableDiffusionPipeline,
                 
+                # Stable Diffusion XL (SDXL)
+                ('SDXL', 'img2img', True): StableDiffusionXLControlNetImg2ImgPipeline,
+                ('SDXL', 'img2img', False): StableDiffusionXLImg2ImgPipeline,
+                ('SDXL', 'inpainting', True): None,  # ControlNet not supported for SDXL inpainting
+                ('SDXL', 'inpainting', False): StableDiffusionXLInpaintPipeline,
+                ('SDXL', 'txt2img', True): StableDiffusionXLControlNetPipeline,
+                ('SDXL', 'txt2img', False): StableDiffusionXLPipeline,
+            }
                 # Determine if ControlNet is used
                 is_controlnet = controlnet_type != "None"
-                pipeline_class = pipeline_classes.get((pipeline_type, is_controlnet))
+                pipeline_class = pipeline_classes.get((base_model, pipeline_type, is_controlnet))
                 
                 if not pipeline_class:
                     raise ValueError("Invalid pipeline type specified.")
@@ -67,17 +80,20 @@ class PipelineManager:
                 print(f"Loading checkpoint from: {checkpoint_name}")
                 
                 pipe = load_method(
-                    os.path.join(self.model_dir, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
+                    os.path.join(MODEL_DIR, checkpoint_name) if checkpoint_name.endswith((".ckpt", ".safetensors")) else checkpoint_name,
                     torch_dtype=TORCH_DTYPE,
                     controlnet= self.controlnet_model,
                     safety_checker=None,
                     requires_safety_checker=IN_COLAB,  # True in colab env
-                    cache_dir=self.model_dir
+                    cache_dir=MODEL_DIR
                 )
+                
                 textual_inversion_manager = DiffusersTextualInversionManager(pipe)
-                self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,textual_inversion_manager=textual_inversion_manager, truncate_long_prompts=False)
-                                
-                # Move the pipeline to GPU if available.
+                if base_model=='SD':
+                    self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,textual_inversion_manager=textual_inversion_manager, truncate_long_prompts=False)
+                if base_model=='SDXL':
+                    self.compel = Compel(tokenizer=[pipe.tokenizer, pipe.tokenizer_2] , text_encoder=[pipe.text_encoder, pipe.text_encoder_2],textual_inversion_manager=textual_inversion_manager, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED, requires_pooled=[False, True], truncate_long_prompts= False) 
+
                 self.active_pipe = pipe
                 if VRAM < 7:
                     print(f"VAE tiling enabled.")
@@ -87,20 +103,16 @@ class PipelineManager:
                     self.active_pipe.enable_xformers_memory_efficient_attention()
                           
                 self.active_checkpoint = checkpoint_name
+                self.active_base_model = base_model
                 self.active_pipeline_type = pipeline_type  # Update active pipeline type
-                
-                if DEVICE == "cuda":
-                    self.active_pipe.enable_model_cpu_offload()
-                    
-                    current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
-                    print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
                 
                 # print(f"PRC:{pipe_reload_condition}")
                 # print(f"CnC:{controlnet_changed}")
-                # print(f"PTC{(pipeline_type != self.active_pipeline_type)}")
+                # print(f"BMC:{(base_model!= self.active_base_model)}")
+                # print(f"PTC:{(pipeline_type != self.active_pipeline_type)}")
                 # print(f"LC:{(self.active_lora_dict!=lora_dict)}")
                 # print(f"CkC:{(checkpoint_name != self.active_checkpoint)}")
-                print(f"Loaded checkpoint: {checkpoint_name} (ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
+                print(f"Loaded checkpoint: {checkpoint_name} (Base: {base_model}, ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
@@ -113,7 +125,13 @@ class PipelineManager:
         # Update Scheduler dynamically
         self.update_scheduler(scheduler, pipe_reload_condition)
         
-        self.update_lora(use_lora, lora_dict)
+        self.update_lora(use_lora, lora_dict, pipe_reload_condition=pipe_reload_condition)
+        
+        if DEVICE == "cuda":
+            self.active_pipe.enable_model_cpu_offload()
+            
+            current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)
+            print(f"Current GPU usage: {current_memory_allocated:.2f} MB")
             
     def update_controlnet(self, controlnet_type: str):
         """Enable or disable ControlNet dynamically based on the dropdown selection."""
@@ -130,13 +148,13 @@ class PipelineManager:
                 "OpenPose - lllyasviel/control_v11p_sd15_openpose": "lllyasviel/control_v11p_sd15_openpose"
             }
             model_name = controlnet_model_map.get(controlnet_type)
-            if model_name and model_name != self.active_controlnet:
+            if model_name and (model_name != self.active_controlnet):
                 try:
                     print(f"Loading ControlNet model: {controlnet_type}")
                     self.controlnet_model = ControlNetModel.from_pretrained(
                         model_name,
                         torch_dtype=TORCH_DTYPE,
-                        cache_dir=self.model_dirs
+                        cache_dir=MODEL_DIR
                     )
                     self.active_controlnet = model_name
                     print(f"ControlNet model {controlnet_type} loaded.")
@@ -165,7 +183,7 @@ class PipelineManager:
                     self.active_pipe.scheduler = scheduler_class.from_pretrained(
                         self.active_checkpoint,
                         subfolder="scheduler",
-                        cache_dir=self.model_dir
+                        cache_dir=MODEL_DIR
                     )
                 else:
                     # For ckpt or safetensor models, initialize scheduler from config
@@ -180,12 +198,12 @@ class PipelineManager:
                 traceback.print_exc()
 
 
-    def update_lora(self, use_lora, lora_dict, lora_adapter_names=[], lora_scales=[], fuse_scale=1.0):
+    def update_lora(self, use_lora, lora_dict, lora_adapter_names=[], lora_scales=[], fuse_scale=1.0, pipe_reload_condition=False):
         """Update the LoRA weights with scaling factors for multiple LoRAs."""
         
         # Construct lora_dirs from lora_names
         
-        if (use_lora and (lora_dict!= self.active_lora_dict)): 
+        if (use_lora and ((lora_dict!= self.active_lora_dict) or pipe_reload_condition)): 
             self.active_pipe.unload_lora_weights()
             lora_paths = list(lora_dict.keys())
             lora_scales = list(lora_dict.values())
@@ -219,7 +237,7 @@ class PipelineManager:
                 self.active_pipe.set_adapters(lora_adapter_names, adapter_weights=lora_scales)
 
                 # Fuse the LoRAs with the given scale
-                print(f"Fusing LoRAs with scale {fuse_scale}...")
+                print("Fusing LoRAs...")
                 self.active_pipe.fuse_lora(adapter_names=lora_adapter_names, lora_scale=fuse_scale)
                 self.active_lora_dict = lora_dict
             except Exception as e:
@@ -227,7 +245,6 @@ class PipelineManager:
 
             print("LoRAs loaded and fused.")  
             
-
         else:
             if not use_lora:
             # Unload LoRA weights if not using LoRA

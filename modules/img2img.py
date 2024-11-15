@@ -20,7 +20,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_image(pipeline_manager: PipelineManager, controlnet_name, seed, input_image, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, preview_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt):
+def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, input_image, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, preview_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -33,9 +33,18 @@ def generate_image(pipeline_manager: PipelineManager, controlnet_name, seed, inp
     # Cache to track already loaded embeddings
     load_embeddings_for_prompt(pipe, prompt, negative_prompt=negative_prompt)
     
-    conditioning = compel.build_conditioning_tensor(prompt)
-    negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
-    [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
+    if base_model == 'SD':
+        con_embeds = compel.build_conditioning_tensor(prompt)
+        neg_embeds = compel.build_conditioning_tensor(negative_prompt)
+        [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([con_embeds, neg_embeds])
+
+    elif base_model == 'SDXL':
+        # Build positive and negative prompt embeddings
+        con_embeds, con_pooled = compel.build_conditioning_tensor(prompt)
+        neg_embeds, neg_pooled = compel.build_conditioning_tensor(negative_prompt)
+        [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([con_embeds, neg_embeds])
+    else:
+        print("Invalid base model.")
     
     width, height = int(width), int(height) # Since custom input is allowed, it may be a string.
     
@@ -125,6 +134,13 @@ def generate_image(pipeline_manager: PipelineManager, controlnet_name, seed, inp
 
     if mode != "Image To Image":
         pipe_kwargs["mask_image"] = 1.0 - mask_image
+        
+    if base_model == 'SDXL':
+        # Add pooled embeddings for SDXL
+        pipe_kwargs.update({
+            "pooled_prompt_embeds": con_pooled,
+            "negative_pooled_prompt_embeds": neg_pooled,
+        })
     
 
     # Add control_image to the keyword arguments if ControlNet is used
@@ -190,6 +206,8 @@ def generate_image(pipeline_manager: PipelineManager, controlnet_name, seed, inp
         
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("mode", mode)
+    metadata.add_text("base_model", str(pipeline_manager.active_base_model))
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))

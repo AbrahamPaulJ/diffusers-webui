@@ -20,41 +20,57 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength, hires_fix, use_lora, lora_dropdown, lora_prompt):
+def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength, hires_fix, use_lora, lora_dropdown, lora_prompt):
     """Generate an image from text prompt using the loaded pipeline."""
 
     pipe = pipeline_manager.active_pipe
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
 
-    compel = pipeline_manager.compel
-    
+
     # Cache to track already loaded embeddings
     load_embeddings_for_prompt(pipe, prompt, negative_prompt=negative_prompt)
-    
-    
     print(f"Using embeddings: {loaded_embeddings}")
     
-    conditioning = compel.build_conditioning_tensor(prompt)
-    negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
-    [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
+    compel = pipeline_manager.compel
     
+    if base_model == 'SD':
+        con_embeds = compel.build_conditioning_tensor(prompt)
+        neg_embeds = compel.build_conditioning_tensor(negative_prompt)
+        [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([con_embeds, neg_embeds])
+
+    elif base_model == 'SDXL':
+        # Build positive and negative prompt embeddings
+        con_embeds, con_pooled = compel.build_conditioning_tensor(prompt)
+        neg_embeds, neg_pooled = compel.build_conditioning_tensor(negative_prompt)
+        [con_embeds, neg_embeds] = compel.pad_conditioning_tensors_to_same_length([con_embeds, neg_embeds])
+    else:
+        print("Invalid base model.")
+    
+
     width, height = int(width), int(height)
 
+    # Prepare kwargs for pipeline
     pipe_kwargs = {
-    "num_images_per_prompt": batch_size,
-    # "prompt": prompt,
-    # "negative_prompt": negative_prompt,
-    "prompt_embeds":con_embeds,
-    "negative_prompt_embeds":neg_embeds,
-    "generator": generator,
-    "width": width,
-    "height": height,
-    "num_inference_steps": steps,
-    "guidance_scale": cfg_scale,
-    "clip_skip": clip_skip
-}
-    
+        "num_images_per_prompt": batch_size,
+        "prompt_embeds": con_embeds,
+        "negative_prompt_embeds": neg_embeds,
+        "generator": generator,
+        "width": width,
+        "height": height,
+        "num_inference_steps": steps,
+        "guidance_scale": cfg_scale,
+        "clip_skip": clip_skip
+    }
+
+    if base_model == 'SDXL':
+        # Add pooled embeddings for SDXL
+        pipe_kwargs.update({
+            "pooled_prompt_embeds": con_pooled,
+            "negative_pooled_prompt_embeds": neg_pooled,
+        })
+
+
     # Add control_image to the keyword arguments if ControlNet is used
     controlnet = pipeline_manager.active_controlnet
     
@@ -82,7 +98,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     
     # Create metadata with function parameters
     metadata = PngImagePlugin.PngInfo()
-    #metadata.add_text("generator", str(generator))
+    metadata.add_text("base_model", str(pipeline_manager.active_base_model))
     metadata.add_text("pipeline", type(pipeline_manager.active_pipe).__name__)
     metadata.add_text("model/checkpoint", str(pipeline_manager.active_checkpoint))
     metadata.add_text("scheduler", str(pipeline_manager.active_scheduler))
@@ -107,13 +123,20 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
 
     if hires_fix: 
         
-        from diffusers import StableDiffusionImg2ImgPipeline
+        from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
         from diffusers.models.attention_processor import AttnProcessor2_0
         from RealESRGAN import RealESRGAN
         import torch
         from PIL import Image
-         
-        i2ipipe = StableDiffusionImg2ImgPipeline(**pipe.components)
+        
+        print("pipe details:")
+        print(pipe)
+        print(base_model)
+        
+        if base_model=='SDXL':
+            i2ipipe = StableDiffusionXLImg2ImgPipeline(**pipe.components)
+        else:
+            i2ipipe = StableDiffusionImg2ImgPipeline(**pipe.components) 
 
         pipe.enable_vae_tiling()
 
@@ -151,6 +174,15 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
             "clip_skip": 2,
             "strength": 0.3
     }
+        
+        if base_model == 'SDXL':
+            # Add pooled embeddings for SDXL
+            i2i_pipe_kwargs.update({
+                "pooled_prompt_embeds": con_pooled,
+                "negative_pooled_prompt_embeds": neg_pooled,
+            })
+        
+        
         print("Applying hires .fix...")
         generated_images = i2ipipe(**i2i_pipe_kwargs).images
         print("hires .fix applied successfully.")
@@ -162,7 +194,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
         generated_images[0].save(output_path, pnginfo=metadata)
         
         if IS_LOCAL:
-            first_output_image.save("outputtxt2img.png")
+            first_output_image.save("output_t2i.png")
             
         return generated_images
     
@@ -170,7 +202,7 @@ def generate_txt2img_image(pipeline_manager: PipelineManager, controlnet_name, s
     first_output_image.save(output_path, pnginfo=metadata)
     
     if IS_LOCAL:
-        first_output_image.save("outputtxt2img.png")
+        first_output_image.save("output_t2i.png")
 
     return generated_images
 
