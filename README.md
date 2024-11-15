@@ -30,6 +30,8 @@ python app.py
 
 # Features
 
+- [NEW]: SDXL support.
+
 - Image To Image tab: Allows image-to-image, inpainting and outpainting with the APIs:
 [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
 and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint)
