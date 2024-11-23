@@ -91,3 +91,10 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 - Ensure you have the correct version of Pytorch and CUDA supported by your device, this is necessary for enabling GPU for inference.
 
 - To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically once installed.
+
+# Known Issues
+
+- Image To Image Tab: Controlnet may not work with SDXL.
+- 
+- Text To Image Tab:  Control image upload bug.
+- 
