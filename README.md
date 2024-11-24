@@ -96,5 +96,4 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 
 - Image To Image Tab: Controlnet may not work with SDXL.
   
-- Text To Image Tab:  Control image upload bug.
-  
+- Controlnet Strength - doesn't work (diffusers bug).
