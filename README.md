@@ -30,6 +30,8 @@ python app.py
 
 # Features
 
+- [NEW]: SDXL support.
+
 - Image To Image tab: Allows image-to-image, inpainting and outpainting with the APIs:
 [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
 and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint)
@@ -89,3 +91,9 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 - Ensure you have the correct version of Pytorch and CUDA supported by your device, this is necessary for enabling GPU for inference.
 
 - To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically once installed.
+
+# Known Issues
+
+- Image To Image Tab: Controlnet may not work with SDXL.
+  
+- Controlnet Strength - doesn't work (diffusers bug).
