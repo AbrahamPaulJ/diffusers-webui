@@ -12,6 +12,11 @@ outputs/
 stable-diffusion-webui/
 .gradio/
 tests/
+frames/
+keyframes/
+masks/
+depth_images/
+vid/
 
 #Ignnore files
 test.py

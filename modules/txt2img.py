@@ -8,7 +8,7 @@ from modules.image_processing import create_control_image
 from datetime import datetime
 import os
 import time
-from PIL import PngImagePlugin
+from PIL import PngImagePlugin, Image
 
 def time_execution(fn):
     def wrapper(*args, **kwargs):
@@ -20,18 +20,20 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input, batch_size, controlnet_strength, hires_fix, use_lora, lora_dropdown, lora_prompt):
+def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, control_input: Image.Image, batch_size, controlnet_strength: float, hires_fix, use_lora, lora_dropdown, lora_prompt):
     """Generate an image from text prompt using the loaded pipeline."""
 
     pipe = pipeline_manager.active_pipe
     if pipe is None:
         raise ValueError("Inpainting pipeline not initialized.")
 
+    print("Control image color mode (PIL):", control_input.mode)  
 
     # Cache to track already loaded embeddings
     load_embeddings_for_prompt(pipe, prompt, negative_prompt=negative_prompt)
     print(f"Using embeddings: {loaded_embeddings}")
     
+    control_input = control_input
     compel = pipeline_manager.compel
     
     if base_model == 'SD':
@@ -75,13 +77,14 @@ def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet
     controlnet = pipeline_manager.active_controlnet
     
     if controlnet != None:
+        print("Control image color mode (PIL):", control_input.mode)  
         control_image = create_control_image(control_input, controlnet)
+        print("Control image color mode (PIL):", control_image.mode)  
         print(type(control_image))
         if IS_LOCAL:
             control_image.save("controlimg.png")
-        controlnet_strength = controlnet_strength
-        pipe_kwargs["control_image"] = control_image
-        pipe_kwargs["controlnet_strength"] = controlnet_strength
+        pipe_kwargs["image"] = control_image
+        # pipe_kwargs["controlnet_conditioning_scale"] = float(controlnet_strength)
       
     # Print types for debugging
     # for key, value in pipe_kwargs.items():
@@ -126,7 +129,6 @@ def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet
         from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
         from diffusers.models.attention_processor import AttnProcessor2_0
         from RealESRGAN import RealESRGAN
-        import torch
         from PIL import Image
         
         print("pipe details:")
@@ -188,8 +190,7 @@ def generate_t2i_image(pipeline_manager: PipelineManager, base_model, controlnet
         print("hires .fix applied successfully.")
              
         del i2ipipe
-        if DEVICE == "cuda":
-            torch.cuda.empty_cache() 
+        flush()
             
         generated_images[0].save(output_path, pnginfo=metadata)
         

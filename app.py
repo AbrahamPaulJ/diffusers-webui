@@ -15,7 +15,7 @@ class StableDiffusionApp:
     def __init__(self):
         self.pipeline_manager = PipelineManager()
         # Load the default pipeline
-        self.pipeline_manager.load_pipeline()
+        # self.pipeline_manager.load_pipeline()
         self.setup_gradio_interface()
 
     def setup_gradio_interface(self):
@@ -66,7 +66,7 @@ class StableDiffusionApp:
                         base_model_dropdown = gr.Radio(
                                 label="Base Model",
                                 choices=["SD","SDXL"],
-                                value="SD"
+                                value="SD", scale=0, min_width=200
                             )
 
                         checkpoint_dropdown = gr.Dropdown(
@@ -121,6 +121,7 @@ class StableDiffusionApp:
 
                         with gr.Column(scale=1):
                             fill_setting = gr.Radio(label="Mask", choices=["Inpaint Masked", "Inpaint Not Masked"], value="Inpaint Masked")
+                            mask_crop = gr.Radio(label="Inpaint Mode", choices=["Whole Picture", "Only Masked"], value="Only Masked")
                             steps = gr.Slider(label="Number of Steps", value=20, maximum=50, minimum=1,step=1)
                             denoise_strength = gr.Slider(label="Denoise Strength", minimum=0, maximum=1, value=0.75, step=0.01)
                             outpaint_img_pos = gr.Radio(label="Image Positioned at:", choices=["Center", "Top", "Bottom"], value="Center", visible=False)
@@ -159,20 +160,20 @@ class StableDiffusionApp:
                                 reuse_seed_btn = gr.Button("♻️", size='lg')
                                 
                         clip_skip = gr.Dropdown(label="CLIP Skip", choices=[0, 1, 2], value=1)
-
-                    toggle_mode_hide_components_i2i = [inpaint_mask,mask_blur,fill_setting,post_process]
-                    component_hide_count_i2i = gr.State(value=len(toggle_mode_hide_components_i2i))
-                    
+                        
                     toggle_mode_show_components_i2i = [maintain_aspect_ratio]
                     component_show_count_i2i = gr.State(value=len(toggle_mode_show_components_i2i))
+
+                    toggle_mode_hide_components_i2i = [inpaint_mask,mask_blur,fill_setting,post_process, mask_crop]
+                    component_hide_count_i2i = gr.State(value=len(toggle_mode_hide_components_i2i))
                     
                     toggle_mode_show_components_op = [mask_blur,post_process,outpaint_img_pos,outpaint_max_dim]
                     component_show_count_op = gr.State(value=len(toggle_mode_show_components_op))
                     
-                    toggle_mode_hide_components_op = [fill_setting, maintain_aspect_ratio]
+                    toggle_mode_hide_components_op = [fill_setting, maintain_aspect_ratio, mask_crop]
                     component_hide_count_op = gr.State(value=len(toggle_mode_hide_components_op))
                     
-                    toggle_mode_show_components_ip = [mask_blur,post_process,fill_setting,maintain_aspect_ratio]
+                    toggle_mode_show_components_ip = [mask_blur,post_process,fill_setting,maintain_aspect_ratio, mask_crop]
                     component_show_count_ip = gr.State(value=len(toggle_mode_show_components_ip))
                     
                     toggle_mode_hide_components_ip = [outpaint_img_pos,outpaint_max_dim]
@@ -247,7 +248,7 @@ class StableDiffusionApp:
                                                                    
                     load_status.change(
                         fn=self.seed_and_gen_i2i,
-                        inputs=[base_model_dropdown, controlnet_dropdown, seed,input_image, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt],
+                        inputs=[base_model_dropdown, controlnet_dropdown, seed,input_image, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, inpaint_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt, mask_crop],
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
@@ -269,7 +270,7 @@ class StableDiffusionApp:
                         t2i_base_model_dropdown = gr.Radio(
                             label="Base Model",
                             choices=["SD","SDXL"],
-                            value="SD"
+                            value="SD", scale=0, min_width=200
                         )
 
                         # Dropdown for selecting text-to-image model
@@ -325,7 +326,7 @@ class StableDiffusionApp:
                                             choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
                                             value="None"
                                         )
-                                    t2i_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01, visible=False)
+                                    t2i_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1.0, step=0.01, visible=False)
                                 t2i_control_image = gr.Image(type="pil", label="Control Image", height=300, visible=False)
                                 
                                     
@@ -419,15 +420,15 @@ class StableDiffusionApp:
                         with gr.Column():
                             png_info = gr.Textbox(label="Generation Parameters",lines=25, show_copy_button=True,show_label=True)
                             with gr.Row(equal_height=True):
-                                info_to_img2img_btn = gr.Button("Send Parameters to Image To Image Tab",visible=False)   
+                                info_to_i2i_btn = gr.Button("Send Parameters to Image To Image Tab",visible=False)   
                                 info_to_t2i_btn = gr.Button("Send Parameters to Text to Image Tab",visible=False)  
                                 state= gr.State(value=0)                            
                                                
                     #Listeners
-                    png_input_image.change(fn=get_metadata, inputs=png_input_image, outputs=[png_info, info_to_img2img_btn, info_to_t2i_btn])
+                    png_input_image.change(fn=get_metadata, inputs=png_input_image, outputs=[png_info, info_to_i2i_btn, info_to_t2i_btn])
                     
-                    info_to_img2img_btn.click(
-                    fn=load_info_to_img2img,
+                    info_to_i2i_btn.click(
+                    fn=load_info_to_i2i,
                     inputs=[png_info,state],
                     outputs=[
                         base_model_dropdown,
@@ -436,28 +437,31 @@ class StableDiffusionApp:
                         controlnet_dropdown,
                         controlnet_strength,
                         seed,
-                        input_image,
                         prompt,  
                         negative_prompt,  
                         width,  
                         height,  
                         steps, 
-                        mask_blur,
                         cfg_scale,  
                         clip_skip, 
-                        fill_setting, 
-                        maintain_aspect_ratio,  
-                        post_process,   
-                        denoise_strength, 
                         batch_size,
-                        mode,
-                        outpaint_img_pos,
-                        outpaint_max_dim,
                         use_lora,
                         lora_dropdown,
                         lora_prompt,
+                        input_image,
+                        mask_blur, 
+                        fill_setting,
+                        mask_crop,
+                        maintain_aspect_ratio,
+                        post_process,
+                        denoise_strength,
+                        mode, 
+                        outpaint_img_pos,
+                        outpaint_max_dim, 
                         state
                     ])
+                    
+                    
                     
                     info_to_t2i_btn.click(
                     fn=load_info_to_t2i,

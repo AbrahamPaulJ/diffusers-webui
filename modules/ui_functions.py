@@ -176,7 +176,7 @@ def get_metadata(image):
     
     t2i_btn_visible = True if (output_path and output_path.startswith("outputs/txt2img")) else False
 
-    return "\n".join([f"{k}: {v}" for k, v in metadata.items()]), gr.update(visible=not t2i_btn_visible), gr.update(visible=t2i_btn_visible)
+    return "\n".join([f"{k}: {v}" for k, v in metadata.items()]), gr.update(visible=True), gr.update(visible=t2i_btn_visible)
 
 
 
@@ -195,26 +195,18 @@ def extract_metadata(info):
     
     return parameters
 
-
-
-def load_info_to_img2img(info,state):
+def load_info_to_i2i(info,state):
     state^= 1
     parameters = extract_metadata(info)
     
     loras_used = parameters.get("loras_used", "")
     lora_list = loras_used.split(",") if loras_used else []
     lora_weights = parameters.get("lora_weights", "")
-    
-    
-    if parameters.get("mode") == "Inpaint":
-        background_path = parameters.get("output_path")
-        if background_path:
-            background = Image.open(background_path)
-        else:
-            background = None  
+    background_path = parameters.get("output_path")
+    if background_path:
+        background = Image.open(background_path)
     else:
-        background = None
-            
+        background = None         
     
     # Return updates for each component based on the parsed parameters
     return (
@@ -224,28 +216,31 @@ def load_info_to_img2img(info,state):
         parameters.get("controlnet", "None"),
         parameters.get("controlnet_strength", 1.0),
         parameters.get("seed", -1), 
-        background,
         parameters.get("prompt", ""),             
         parameters.get("negative_prompt", ""),        
-        int(parameters.get("width", 512)),              
-        int(parameters.get("height", 768)),            
-        int(parameters.get("steps", 20)),   
-        float(parameters.get("mask_blur", 0)),       
+        parameters.get("width", 512),              
+        parameters.get("height", 768),            
+        int(parameters.get("steps", 20)),  
         float(parameters.get("cfg_scale", 7.0)),     
         int(parameters.get("clip_skip", 1)),             
-        parameters.get("fill_setting", "Inpaint Masked"),  
-        parameters.get("maintain_aspect_ratio", "True") == "True", 
-        parameters.get("post_process", "True") == "True",  
-        float(parameters.get("denoise_strength", 0.75)),  
         int(parameters.get("batch_size", 1)),
-        parameters.get("mode", "Image To Image"),
-        parameters.get("image_positioned_at", "Center"),
-        parameters.get("maximum_width/height", 768),
         parameters.get("use_lora", "False") == "True",
         lora_list,
         lora_weights,
+        background, 
+        float(parameters.get("mask_blur", 0)), 
+        parameters.get("fill_setting", "Inpaint Masked"),
+        parameters.get("inpaint_mode", "Only Masked"), 
+        parameters.get("maintain_aspect_ratio", "True") == "True", 
+        parameters.get("post_process", "True") == "True",  
+        float(parameters.get("denoise_strength", 0.75)),
+        parameters.get("mode", "Image To Image"),
+        parameters.get("image_positioned_at", "Center"),
+        parameters.get("maximum_width/height", 768),
         state
     )
+    
+
     
 def load_mask_to_inpaint(info):
     time.sleep(0.2)

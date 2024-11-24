@@ -20,7 +20,7 @@ def time_execution(fn):
     return wrapper
 
 @time_execution 
-def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, input_image, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, preview_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength, use_lora, lora_dropdown, lora_prompt):
+def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_name, seed, input_image, generator, prompt, negative_prompt, width, height, steps, cfg_scale, clip_skip, preview_mask, fill_setting, maintain_aspect_ratio, post_process, denoise_strength, batch_size, mask_blur, mode, outpaint_img_pos, outpaint_max_dim, controlnet_strength: float, use_lora, lora_dropdown, lora_prompt, mask_crop):
     """Generate an inpainting image using the loaded pipeline."""
     
     pipe = pipeline_manager.active_pipe
@@ -133,7 +133,20 @@ def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_nam
     }
 
     if mode != "Image To Image":
-        pipe_kwargs["mask_image"] = 1.0 - mask_image
+        mask_arg = 1.0 - mask_image
+        mask_arg = (mask_arg * 255).astype(np.uint8)
+        mask_arg_pil = Image.fromarray(mask_arg)
+        # Add the PIL Image to the pipeline arguments
+        pipe_kwargs["mask_image"] = mask_arg_pil
+        # print(f"Type of mask_image: {type(pipe_kwargs['mask_image'])}")    
+        
+        if mode == "Inpaint":
+            if mask_crop=="Only Masked":
+                pipe_kwargs.update({
+                "padding_mask_crop": 32,
+            })
+
+
         
     if base_model == 'SDXL':
         # Add pooled embeddings for SDXL
@@ -150,9 +163,8 @@ def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_nam
         control_image = create_control_image(input_image, controlnet)
         if IS_LOCAL:
             control_image.save("controlimg.png")
-        controlnet_strength = controlnet_strength
         pipe_kwargs["control_image"] = control_image
-        pipe_kwargs["controlnet_strength"] = controlnet_strength       
+        # pipe_kwargs["controlnet_conditioning_scale"] = float(controlnet_strength)  
       
     # Generate the image with the prepared arguments
     generated_images = pipe(**pipe_kwargs).images
@@ -230,6 +242,7 @@ def generate_image(pipeline_manager: PipelineManager, base_model, controlnet_nam
         metadata.add_text("mask_path", mask_path)
         metadata.add_text("fill_setting", str(fill_setting))
         metadata.add_text("maintain_aspect_ratio", str(maintain_aspect_ratio))
+        metadata.add_text("inpaint_mode", str(mask_crop))
     if mode!="Image To Image":
         metadata.add_text("post_process", str(post_process))
     metadata.add_text("denoise_strength", str(denoise_strength))

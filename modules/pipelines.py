@@ -112,7 +112,7 @@ class PipelineManager:
                 # print(f"PTC:{(pipeline_type != self.active_pipeline_type)}")
                 # print(f"LC:{(self.active_lora_dict!=lora_dict)}")
                 # print(f"CkC:{(checkpoint_name != self.active_checkpoint)}")
-                print(f"Loaded checkpoint: {checkpoint_name} (Base: {base_model}, ControlNet Type: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
+                print(f"Loaded checkpoint: {checkpoint_name} (Base: {base_model}, ControlNet: {controlnet_type}, Scheduler: {scheduler}, LoRAs: {'None' if not use_lora else lora_dict})")
 
             except Exception as e:
                 print(f"Error loading checkpoint {checkpoint_name}: {e}")
