@@ -47,6 +47,7 @@ def install_other_dependencies():
         "modules==1.0.0",
         "huggingface_hub==0.25.1",
         "numpy<2",
+        "compel==2.0.2",
         "git+https://github.com/ai-forever/Real-ESRGAN.git"
     ]
     subprocess.check_call([sys.executable, "-m", "pip", "install"] + dependencies)
