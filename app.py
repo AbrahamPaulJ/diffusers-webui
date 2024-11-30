@@ -60,8 +60,11 @@ class StableDiffusionApp:
                             (os.path.isdir(os.path.join(models_folder, file)) and 
                             "control" not in file.lower() and not file.startswith(".")))
                     ]
-                    
-                    checkpoint_choices.extend(["stablediffusionapi/realistic-vision-v6.0-b1-inpaint","runwayml/stable-diffusion-v1-5"])
+                    default_checkpoints = ["stablediffusionapi/realistic-vision-v6.0-b1-inpaint", "runwayml/stable-diffusion-v1-5"]
+
+                    for checkpoint in default_checkpoints:
+                        if checkpoint not in checkpoint_choices:
+                            checkpoint_choices.append(checkpoint)
 
                     with gr.Row(equal_height=True):
                                             
