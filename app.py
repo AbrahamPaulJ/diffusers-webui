@@ -132,7 +132,7 @@ class StableDiffusionApp:
                             post_process = gr.Checkbox(label="Post-Processing", value=True)
                             controlnet_dropdown = gr.Dropdown(
                             label="Select Controlnet", 
-                            choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
+                            choices=["None", "Canny - control_v11p_sd15_canny", "Depth - control_v11f1p_sd15_depth","OpenPose - control_v11p_sd15_openpose"], 
                             value="None"
                         )
                             controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1, step=0.01)
@@ -252,6 +252,7 @@ class StableDiffusionApp:
                         outputs=[generate_button, output_seed, output_image]
                     )
                     
+                    base_model_dropdown.change(fn=change_controlnet, inputs=base_model_dropdown,outputs=controlnet_dropdown)
                     use_lora.change(fn=using_lora, inputs=use_lora, outputs=[lora_dropdown,lora_prompt])
                     use_lora.change(fn=lora_to_prompt_cb,inputs=[steps,lora_dropdown],outputs=lora_prompt)
                     lora_dropdown.change(fn=lora_to_prompt, inputs=lora_dropdown,outputs=lora_prompt)
@@ -323,7 +324,7 @@ class StableDiffusionApp:
                                 with gr.Row():                          
                                     t2i_controlnet_dropdown = gr.Dropdown(
                                             label="Select Controlnet", 
-                                            choices=["None", "Canny - lllyasviel/control_v11p_sd15_canny", "Depth - lllyasviel/control_v11f1p_sd15_depth","OpenPose - lllyasviel/control_v11p_sd15_openpose"], 
+                                            choices=["None", "Canny - control_v11p_sd15_canny", "Depth - control_v11f1p_sd15_depth","OpenPose - control_v11p_sd15_openpose"], 
                                             value="None"
                                         )
                                     t2i_controlnet_strength = gr.Slider(label="ControlNet Strength", minimum=0, maximum=1, value=1.0, step=0.01, visible=False)
@@ -407,6 +408,7 @@ class StableDiffusionApp:
                          outputs=[t2i_generate_button, t2i_output_seed, t2i_output_image]
                     )
                     
+                    t2i_base_model_dropdown.change(fn=change_controlnet, inputs=t2i_base_model_dropdown,outputs=t2i_controlnet_dropdown)
                     t2i_controlnet_dropdown.change(fn=upload_control_img,inputs=t2i_controlnet_dropdown,outputs=[t2i_control_image,t2i_controlnet_strength])
                     t2i_use_lora.change(fn=using_lora, inputs=t2i_use_lora, outputs=[t2i_lora_dropdown,t2i_lora_prompt])
                     t2i_use_lora.change(fn=lora_to_prompt_cb,inputs=[t2i_use_lora,t2i_lora_dropdown],outputs=t2i_lora_prompt)

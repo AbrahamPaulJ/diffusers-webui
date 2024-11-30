@@ -105,6 +105,18 @@ def auto_dim(image):
 def warn_no_image(img):
     if img==None:
         gr.Warning('Please upload an image.')
+        
+def change_controlnet(base_model):
+    if base_model == "SDXL":
+        return gr.update(
+            choices=["None", "Canny - controlnet-canny-sdxl-1.0", "Depth - controlnet-depth-sdxl-1.0","OpenPose - controlnet-openpose-sdxl-1.0"], 
+            value="None"
+        )
+    else:
+        return gr.update(
+            choices=["None", "Canny - control_v11p_sd15_canny", "Depth - control_v11f1p_sd15_depth", "OpenPose - control_v11p_sd15_openpose"], 
+            value="None"
+        )
     
 def upload_control_img(controlnet_dropdown):
     if controlnet_dropdown!="None":

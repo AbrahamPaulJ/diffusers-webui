@@ -30,7 +30,7 @@ python app.py
 
 # Features
 
-- [NEW]: SDXL support.
+- Supports SD 1.5 and SDXL models.
 
 - Image To Image tab: Allows image-to-image, inpainting and outpainting with the APIs:
 [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
@@ -94,6 +94,4 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 
 # Known Issues
 
-- Image To Image Tab: Controlnet may not work with SDXL.
-  
 - Controlnet Strength - doesn't work (diffusers bug).

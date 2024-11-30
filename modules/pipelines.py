@@ -143,9 +143,13 @@ class PipelineManager:
             
         else:
             controlnet_model_map = {                
-                "Canny - lllyasviel/control_v11p_sd15_canny": "lllyasviel/control_v11p_sd15_canny",
-                "Depth - lllyasviel/control_v11f1p_sd15_depth": "lllyasviel/control_v11f1p_sd15_depth",
-                "OpenPose - lllyasviel/control_v11p_sd15_openpose": "lllyasviel/control_v11p_sd15_openpose"
+                "Canny - control_v11p_sd15_canny": "lllyasviel/control_v11p_sd15_canny",
+                "Depth - control_v11f1p_sd15_depth": "lllyasviel/control_v11f1p_sd15_depth",
+                "OpenPose - control_v11p_sd15_openpose": "lllyasviel/control_v11p_sd15_openpose",
+                
+                "Canny - controlnet-canny-sdxl-1.0": "diffusers/controlnet-canny-sdxl-1.0",
+                "Depth - controlnet-depth-sdxl-1.0": "diffusers/controlnet-depth-sdxl-1.0",
+                "OpenPose - controlnet-openpose-sdxl-1.0": "thibaud/controlnet-openpose-sdxl-1.0"
             }
             model_name = controlnet_model_map.get(controlnet_type)
             if model_name and (model_name != self.active_controlnet):
