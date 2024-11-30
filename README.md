@@ -19,7 +19,7 @@ cd diffusers-webui
 # Install dependencies
 
 ```markdown
-pip install -r requirements.txt
+python install.py
 ```
 
 # Run
@@ -33,12 +33,12 @@ python app.py
 - Supports SD 1.5 and SDXL models.
 
 - Image To Image tab: Allows image-to-image, inpainting and outpainting with the APIs:
-[StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
+[StableDiffusionImg2ImgPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/img2img)
 and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/stable_diffusion/inpaint)
 
     - Implemented features:
 
-        - ControlNet support: Canny, Depth and Openpose.
+        - ControlNet support with [StableDiffusionControlNetPipeline](https://huggingface.co/docs/diffusers/en/api/pipelines/controlnet) : Canny, Depth and Openpose. 
 
         - Support for multiple LoRA and embedding files (textual inversion).
 
