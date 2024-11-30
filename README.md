@@ -98,4 +98,4 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 
 # Known Issues
 
-- Controlnet Strength - doesn't work (diffusers bug).
+- Controlnet Strength Slider - doesn't work (diffusers bug).

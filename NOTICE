@@ -1,3 +1,8 @@
 This software makes use of the Diffusers library, which is licensed under the Apache License 2.0.
 
 See https://github.com/huggingface/diffusers for the Diffusers repository and license information.
+
+Other softwares used include:
+
+For upscaling: https://huggingface.co/ai-forever/Real-ESRGAN
+For prompt weighting: https://github.com/damian0815/compel
