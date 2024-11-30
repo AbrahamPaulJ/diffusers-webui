@@ -40,6 +40,8 @@ SCHEDULERS = {
     "PNDM": diffusers.schedulers.PNDMScheduler,
 }
 
+
+os.makedirs("embeddings", exist_ok=True)
 loaded_embeddings = set()
 
 import os
