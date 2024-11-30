@@ -86,9 +86,13 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 
 # Notes
 
+- You can add new checkpoints/models to the models folder. Supports ".ckpt", ".safetensor" and diffusers formats. 
+
+- Similarly, there are folders for LoRAs and embeddings.
+
 - Prompt format: To add prompt weighting, please use [Compel Prompt Syntax](https://github.com/damian0815/compel/blob/main/Reference.md)
 
-- Ensure you have the correct version of Pytorch and CUDA supported by your device, this is necessary for enabling GPU for inference.
+- Ensure you have the correct version of Pytorch and CUDA supported by your device, in case you want to enable GPU for inference.
 
 - To increase generation speed with GPU, you can install xformers if it is supported. It will be detected automatically once installed.
 
