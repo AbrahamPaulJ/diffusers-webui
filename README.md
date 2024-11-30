@@ -86,7 +86,7 @@ and [StableDiffusionInpaintPipeline](https://huggingface.co/docs/diffusers/en/ap
 
 # Notes
 
-- You can add new checkpoints/models to the models folder. Supports ".ckpt", ".safetensor" and diffusers formats. 
+- You can add new checkpoints/models to the models folder. Supports ".ckpt", ".safetensors" and diffusers formats. 
 
 - Similarly, there are folders for LoRAs and embeddings.
 
