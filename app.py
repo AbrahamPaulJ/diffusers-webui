@@ -60,6 +60,8 @@ class StableDiffusionApp:
                             (os.path.isdir(os.path.join(models_folder, file)) and 
                             "control" not in file.lower() and not file.startswith(".")))
                     ]
+                    
+                    checkpoint_choices.extend(["stablediffusionapi/realistic-vision-v6.0-b1-inpaint","runwayml/stable-diffusion-v1-5"])
 
                     with gr.Row(equal_height=True):
                                             
